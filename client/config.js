@@ -5,13 +5,11 @@
    Ne JAMAIS mettre ici la clé "service_role" de Supabase ni la clé Resend.
    ========================================================================== */
 window.IVO_CONFIG = {
-  // Réglages → API → Project URL / anon public key, dans votre projet Supabase
-  SUPABASE_URL: "https://your-project-ref.supabase.co",
-  SUPABASE_ANON_KEY: "your-anon-public-key",
+  SUPABASE_URL: "https://viwsksiktulpvqvjuiux.supabase.co",
+  SUPABASE_ANON_KEY: "sb_publishable_A8BM0ShMoy4meT1OgHqhWg_l0ULTuk7",
 
-  // Liste affichée dans le menu déroulant "Votre conseiller" en fin de questionnaire.
   ADVISORS: [
     { name: "Tristan Dantin", email: "tristan.dantin@ivocapital.com" },
-    { name: "Exemple Conseiller", email: "conseiller.exemple@ivocapital.com" },
+    { name: "Gabriel Atimi", email: "gabriel.atimi@ivocapital.com" },
   ],
 };
