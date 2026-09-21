@@ -1,0 +1,1084 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Connaissance Client — IVO Capital Partners</title>
+<link rel="stylesheet" href="../lib/ivo-theme.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Libre+Franklin:wght@600;700;800&display=swap">
+</head>
+<body>
+
+<div id="topbar"></div>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../lib/pdf-fill.js"></script>
+<script src="config.js"></script>
+<script src="../lib/submit.js"></script>
+<script>
+(function(){
+"use strict";
+
+var STORAGE_KEY = "ivo_kyc_draft_v1";
+var ADVISOR_EMAIL = "tristan.dantin@ivocapital.com";
+
+var STEPS = [
+  {key:"identite", label:"Identité"},
+  {key:"vigilance", label:"Vigilance"},
+  {key:"patrimoine", label:"Patrimoine"},
+  {key:"connaissance", label:"Connaissances"},
+  {key:"objectifs", label:"Objectifs"},
+  {key:"durabilite", label:"Durabilité"},
+  {key:"profil", label:"Profil"},
+  {key:"recap", label:"Bilan"}
+];
+
+var OBJ_LABELS_PHYSIQUE = {
+  valoriser:"Valoriser votre capital", completer:"Compléter vos revenus",
+  diversifier:"Diversifier vos placements", securite:"Constituer un capital de sécurité",
+  fiscalite:"Optimiser votre fiscalité", performance:"Optimiser vos performances",
+  succession:"Préparer votre succession"
+};
+var OBJ_LABELS_MORALE = {
+  valoriser:"Valoriser votre capital", tresorerie:"Rémunérer votre trésorerie",
+  diversifier:"Diversifier vos placements", revenus:"Obtenir des revenus réguliers",
+  fiscalite:"Optimiser votre fiscalité", investissements:"Réaliser des investissements",
+  garantie:"Apporter une garantie financière"
+};
+
+var INSTRUMENTS = [
+  {k:"actions", n:"Actions", d:"Titres de propriété d'une entreprise cotée en bourse."},
+  {k:"obligations", n:"Obligations", d:"Titres de dette émis par un État ou une entreprise."},
+  {k:"monetaire", n:"Instruments du marché monétaire", d:"Placements à court terme très liquides."},
+  {k:"opcvm", n:"Fonds communs de placement / SICAV", d:"Fonds qui regroupent plusieurs investisseurs pour investir collectivement."},
+  {k:"etf", n:"Trackers / ETF", d:"Fonds indiciels cotés qui répliquent la performance d'un indice."},
+  {k:"warrants", n:"Warrants / certificats", d:"Produits dérivés à effet de levier, plus techniques."},
+  {k:"defiscalisation", n:"Produits de défiscalisation (FCPI, FIP…)", d:"Fonds donnant droit à un avantage fiscal, avec des contraintes de durée."},
+  {k:"nonCotees", n:"Sociétés non cotées", d:"Participations directes dans des entreprises non cotées (private equity)."},
+  {k:"contratsFinanciers", n:"Contrats financiers (futures, options)", d:"Produits dérivés complexes utilisés pour se couvrir ou spéculer."}
+];
+
+function defaultState(){
+  return {
+    step:-1,
+    advisorDraft:{email:"", name:""},
+    sentAt:null,
+    pdfDownloaded:false,
+    advisorEmail:"",
+    personType:"physique",
+    civilite:"", nom:"", prenom:"", dateNaissance:"", adresse:"", profession:"",
+    situationFamille:"", regimeMatrimonial:"", nbEnfants:"",
+    renseignerConjoint:false, conjoint:{nom:"",prenom:"",dateNaissance:""},
+    morale:{denomination:"",formeJuridique:"",adresse:"",pays:"",rcs:"",activite:"",regimeFiscal:"IS",
+      repNom:"",repPrenom:"",repFonction:"",repTel:"",repEmail:""},
+    contact:{email:"",telephone:""},
+
+    ppe:{vous:null, vousFonction:"", vousPays:"", conjointPPE:null, conjointFonction:"", conjointPays:"",
+      famille:null, familleFonction:"", famillePays:""},
+    beneficiaires:"", controle:"",
+    fonds:{montant:"", origine:"france", origineDetail:"", natures:[], autreNature:""},
+
+    pp:{residencePrincipale:"",residenceSecondaire:"",immobilierInvest:"",autresImmo:"",
+      assuranceVie:"",comptesTitres:"",epargneLogement:"",epargneSalariale:"",autresFinanciers:"",
+      actifsPro:"",liquidites:"",
+      revenusPro:"",revenusLocatifs:"",revenusVM:"",revenusAutres:"",
+      chargesEmprunt:"",chargesPension:"",chargesCourantes:"",chargesAutres:"",
+      impotRevenu:"",impotLocatif:"",impotVM:""},
+    pm:{locauxPro:"",immobilierInvest:"",autresImmo:"",
+      comptesTitres:"",autresFinanciers:"",autresActifs:"",tresorerie:"",
+      produitsExploitation:"",produitsFinanciers:"",produitsExceptionnels:"",
+      chargesExploitation:"",chargesFinancieres:"",chargesExceptionnelles:"",
+      impot:""},
+
+    instruments:(function(){var o={};INSTRUMENTS.forEach(function(i){o[i.k]={connait:null,ops:null};});return o;})(),
+    gereSeul:null, gereSeulDepuis:"", mandatGestion:null, experiencePro:null, gains:null, pertes:null, conscienceRisque:null,
+
+    objOrder: ["valoriser","completer","diversifier","securite","fiscalite","performance","succession"],
+    objOrderMorale: ["valoriser","tresorerie","diversifier","revenus","fiscalite","investissements","garantie"],
+    horizon:null,
+    projetsCourtTerme:"",
+
+    esg:{inclure:null, thematique:null, sfdr:null, impact:null},
+
+    risque:{perte:null, reaction:null, rendement:null},
+
+    certifie:false
+  };
+}
+
+var state = load() || defaultState();
+if(!state.advisorDraft){ state.advisorDraft = {email:"", name:""}; }
+if(typeof state.sentAt === "undefined"){ state.sentAt = null; }
+if(typeof state.pdfDownloaded === "undefined"){ state.pdfDownloaded = false; }
+if(typeof state.advisorEmail === "undefined"){ state.advisorEmail = ""; }
+var visited = {}; // steps visited, for progress checkmarks
+if(state.step >= 0){ for(var i=0;i<=state.step;i++) visited[i]=true; }
+var advisorPanelOpen = false;
+
+function advisorDisplayName(){
+  var local = ADVISOR_EMAIL.split("@")[0];
+  return local.split(/[._-]/).map(function(p){ return p.charAt(0).toUpperCase()+p.slice(1); }).join(" ");
+}
+
+function load(){
+  try{
+    var raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return null;
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+function save(){
+  try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }catch(e){}
+}
+function getPath(obj, path){
+  var parts = path.split(".");
+  var cur = obj;
+  for(var i=0;i<parts.length;i++){ if(cur==null) return undefined; cur = cur[parts[i]]; }
+  return cur;
+}
+function setPath(obj, path, value){
+  var parts = path.split(".");
+  var cur = obj;
+  for(var i=0;i<parts.length-1;i++){ cur = cur[parts[i]]; }
+  cur[parts[parts.length-1]] = value;
+}
+function n(v){ var f = parseFloat(v); return isNaN(f) ? 0 : f; }
+function fmt(v){ return n(v).toLocaleString('fr-FR'); }
+function esc(s){ return (s||"").toString().replace(/[&<>"']/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+
+function showToast(msg){
+  var t = document.getElementById("toast");
+  t.textContent = msg;
+  t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 2200);
+}
+
+/* ---------- render dispatch ---------- */
+var topbarPainted = false;
+function render(resetScroll){
+  if(!topbarPainted){
+    document.getElementById("topbar").innerHTML = renderTopbar();
+    topbarPainted = true;
+  }
+  var savedY = window.scrollY;
+  var app = document.getElementById("app");
+  if(state.step === -1){
+    app.innerHTML = renderIntro();
+  } else {
+    app.innerHTML = progressBar() + '<div class="card">' + renderStep(state.step) + '</div>';
+  }
+  bindEvents();
+  if(resetScroll){ window.scrollTo(0,0); } else { window.scrollTo(0, savedY); }
+}
+
+function renderTopbar(){
+  return '' +
+  '<div class="topbar-inner">' +
+    '<div class="brand-badge"><span>IVO</span></div>' +
+    '<div><div class="brand-name">IVO Capital Partners</div><div class="brand-sub">Connaissance client</div></div>' +
+  '</div>';
+}
+
+function isStepComplete(i){
+  var isPM = state.personType==="morale";
+  switch(STEPS[i].key){
+    case "identite":
+      var idOk = isPM ? !!state.morale.denomination : !!(state.nom && state.prenom);
+      return idOk && !!state.contact.email;
+    case "vigilance":
+      var conjointOk = (state.personType==="physique" && (state.situationFamille==="Marié(e)" || state.situationFamille==="Pacsé(e)"))
+        ? state.ppe.conjointPPE!==null : true;
+      return state.ppe.vous!==null && state.ppe.famille!==null && conjointOk && !!state.fonds.montant;
+    case "patrimoine":
+      return true; // toutes les valeurs sont volontairement facultatives sur cette étape
+    case "connaissance":
+      var instrOk = INSTRUMENTS.every(function(ins){ return state.instruments[ins.k].connait!==null; });
+      return instrOk && state.gereSeul!==null && state.mandatGestion!==null && state.experiencePro!==null &&
+        state.gains!==null && state.pertes!==null && state.conscienceRisque!==null;
+    case "objectifs":
+      return !!state.horizon;
+    case "durabilite":
+      return !!state.esg.inclure && !!state.esg.sfdr && !!state.esg.impact;
+    case "profil":
+      return !!(state.risque.perte && state.risque.reaction && state.risque.rendement);
+    case "recap":
+      return !!state.sentAt;
+  }
+  return false;
+}
+
+function progressBar(){
+  var pct = (state.step/(STEPS.length-1))*100;
+  var html = '<div class="progress">';
+  STEPS.forEach(function(s,i){
+    var complete = isStepComplete(i);
+    var cls = "pstep";
+    if(i===state.step) cls += " active";
+    else if(complete) cls += " done";
+    var mark = complete ? "✓" : (i+1);
+    html += '<button class="'+cls+'" data-action="goto" data-step="'+i+'">' +
+      '<div class="pdot">'+mark+'</div><div class="plabel">'+s.label+'</div></button>';
+  });
+  html += '</div>';
+  html += '<div class="pbar-track"><div class="pbar-fill" style="width:'+pct+'%"></div></div><div style="height:22px"></div>';
+  return html;
+}
+
+function renderIntro(){
+  var hasDraft = !!load();
+  return '' +
+  '<div class="card">' +
+    '<div class="eyebrow">Questionnaire de connaissance client · MIF 2</div>' +
+    '<h1 class="step-title">Faisons connaissance</h1>' +
+    '<p class="step-intro">Avant de vous accompagner dans vos investissements, la réglementation nous demande de mieux vous connaître : votre situation, votre expérience des marchés et vos objectifs. C\'est aussi dans votre intérêt&nbsp;: cela nous permet de vous proposer des solutions réellement adaptées.</p>' +
+    '<div class="intro-list">' +
+      '<div class="intro-item"><div class="n">1</div>Quelques informations sur vous et votre situation familiale</div>' +
+      '<div class="intro-item"><div class="n">2</div>Des vérifications réglementaires standard (identique pour tous nos clients)</div>' +
+      '<div class="intro-item"><div class="n">3</div>Votre patrimoine, vos revenus, votre expérience des marchés</div>' +
+      '<div class="intro-item"><div class="n">4</div>Vos objectifs, votre horizon et vos préférences en matière de durabilité</div>' +
+      '<div class="intro-item"><div class="n">5</div>Un profil de risque indicatif, que votre conseiller confirmera avec vous</div>' +
+    '</div>' +
+    '<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:22px;">' +
+      '<span class="pill">⏱ 8 à 10 minutes</span>' +
+      '<span class="pill">🔒 Réponses confidentielles</span>' +
+      '<span class="pill">↩ Vous pouvez revenir en arrière à tout moment</span>' +
+    '</div>' +
+    '<div class="actionrow">' +
+      '<button class="btn btn-primary" data-action="start">Commencer</button>' +
+      (hasDraft ? '<button class="btn btn-ghost" data-action="reset">Recommencer à zéro</button>' : '') +
+    '</div>' +
+  '</div>' +
+  renderAdvisorBox();
+}
+
+function renderAdvisorBox(){
+  var html = '<div class="advisor-box">' +
+    '<button class="advisor-toggle" data-action="toggleAdvisor">🔧 Espace conseiller — partager ce lien avec un client'+(advisorPanelOpen?" ▲":" ▼")+'</button>';
+  if(advisorPanelOpen){
+    var link = (typeof window!=="undefined" && window.location && window.location.href) ? window.location.href : "";
+    html += '<div class="advisor-panel">' +
+      '<p class="advisor-note">Ce lien est celui de cette page. Partagez-le tel quel, ou pré-remplissez une invitation ci-dessous.</p>' +
+      '<div class="field-row">' +
+        textField("advisorDraft.name","Prénom du client","",false) +
+        emailField("advisorDraft.email","Email du client",false) +
+      '</div>' +
+      '<div class="actionrow">' +
+        '<button class="btn btn-ghost" data-action="advisorCopyLink">🔗 Copier le lien</button>' +
+        '<button class="btn btn-gold" data-action="advisorMailto">✉ Préparer l\'invitation</button>' +
+      '</div>' +
+      (link ? '<div class="advisor-link">'+esc(link)+'</div>' : '') +
+    '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderStep(i){
+  switch(STEPS[i].key){
+    case "identite": return stepIdentite();
+    case "vigilance": return stepVigilance();
+    case "patrimoine": return stepPatrimoine();
+    case "connaissance": return stepConnaissance();
+    case "objectifs": return stepObjectifs();
+    case "durabilite": return stepDurabilite();
+    case "profil": return stepProfil();
+    case "recap": return stepRecap();
+  }
+}
+
+function navButtons(opts){
+  opts = opts || {};
+  var back = state.step>0 ? '<button class="btn btn-ghost" data-action="prev">← Précédent</button>' : '<span></span>';
+  var next = opts.nextLabel || "Continuer →";
+  var nextBtn = state.step < STEPS.length-1 ? '<button class="btn btn-primary" data-action="next">'+next+'</button>' : '';
+  return '<div class="navrow">'+back+nextBtn+'</div>';
+}
+
+/* ---------- STEP 1 : IDENTITE ---------- */
+function stepIdentite(){
+  var p = state.personType;
+  var html = '<div class="eyebrow">Étape 1 / 7</div><h2 class="step-title">Qui êtes-vous&nbsp;?</h2>' +
+    '<p class="step-intro">Ces informations servent à établir votre dossier et à vous identifier auprès de vos interlocuteurs chez IVO Capital Partners.</p>' +
+    '<div class="field"><div class="chips">' +
+      '<button class="chip'+(p==="physique"?" on":"")+'" data-action="set" data-path="personType" data-value="physique">Personne physique</button>' +
+      '<button class="chip'+(p==="morale"?" on":"")+'" data-action="set" data-path="personType" data-value="morale">Personne morale (société)</button>' +
+    '</div></div>';
+
+  if(p==="physique"){
+    html += fieldRow([
+      textField("nom","Nom","",true),
+      textField("prenom","Prénom","",true)
+    ]) +
+    fieldRow([
+      dateField("dateNaissance","Date de naissance"),
+      textField("profession","Profession (ou ancienne profession si retraité)")
+    ]) +
+    textareaField("adresse","Adresse postale") +
+    fieldRow([
+      selectField("situationFamille","Situation de famille",["","Célibataire","Pacsé(e)","Marié(e)","Divorcé(e)","Veuf / veuve"]),
+      state.situationFamille==="Marié(e)" ? selectField("regimeMatrimonial","Régime matrimonial",["","Communauté légale","Communauté universelle","Séparation de biens","Participation aux acquêts"]) : numField("nbEnfants","Enfants / personnes à charge")
+    ]) +
+    (state.situationFamille==="Marié(e)" ? fieldRow([numField("nbEnfants","Enfants / personnes à charge")]) : "") +
+    checkline("renseignerConjoint","Je souhaite renseigner les informations de mon conjoint") +
+    (state.renseignerConjoint ? fieldRow([
+        textField("conjoint.nom","Nom du conjoint"),
+        textField("conjoint.prenom","Prénom du conjoint")
+      ]) + fieldRow([dateField("conjoint.dateNaissance","Date de naissance du conjoint")]) : "");
+  } else {
+    html += fieldRow([
+      textField("morale.denomination","Dénomination de la société","",true),
+      textField("morale.formeJuridique","Forme juridique (SAS, SCI…)")
+    ]) +
+    textareaField("morale.adresse","Adresse du siège social") +
+    fieldRow([
+      textField("morale.pays","Pays"),
+      textField("morale.rcs","N° d'identification (RCS)")
+    ]) +
+    fieldRow([
+      textField("morale.activite","Activité de la société"),
+      selectField("morale.regimeFiscal","Régime fiscal",["IS","IR"])
+    ]) +
+    '<div class="field"><label class="flabel">Personne habilitée à répondre au questionnaire</label></div>' +
+    fieldRow([
+      textField("morale.repNom","Nom"),
+      textField("morale.repPrenom","Prénom")
+    ]) +
+    fieldRow([
+      textField("morale.repFonction","Fonction"),
+      textField("morale.repTel","Téléphone")
+    ]);
+  }
+
+  html += '<div class="field"><label class="flabel">Vos coordonnées <span class="opt">(pour que votre conseiller puisse vous recontacter)</span></label></div>' +
+    fieldRow([
+      emailField("contact.email","Email",true),
+      telField("contact.telephone","Téléphone")
+    ]);
+
+  html += navButtons();
+  return html;
+}
+
+/* ---------- STEP 2 : VIGILANCE (LCB-FT) ---------- */
+function stepVigilance(){
+  var html = '<div class="eyebrow">Étape 2 / 7</div><h2 class="step-title">Vérifications réglementaires</h2>' +
+    '<p class="step-intro">Cette étape est imposée par la réglementation française de lutte contre le blanchiment (LCB-FT). Elle est identique pour l\'ensemble de nos clients — ce n\'est en rien une suspicion à votre égard.</p>';
+
+  html += yesNoField("ppe.vous","Exercez-vous, ou avez-vous exercé depuis moins d'un an, une fonction politique, juridictionnelle ou administrative importante ?",
+    "On parle ici de \"Personne Politiquement Exposée\" (ministre, élu, magistrat, haut fonctionnaire...). La quasi-totalité des clients répondent \"Non\".");
+  if(state.ppe.vous===true){
+    html += fieldRow([textField("ppe.vousFonction","Quelle fonction ?"), textField("ppe.vousPays","Dans quel pays ?")]);
+  }
+
+  if(state.personType==="physique" && (state.situationFamille==="Marié(e)" || state.situationFamille==="Pacsé(e)")){
+    html += yesNoField("ppe.conjointPPE","Votre conjoint est-il, ou a-t-il été, dans cette situation ?");
+    if(state.ppe.conjointPPE===true){
+      html += fieldRow([textField("ppe.conjointFonction","Quelle fonction ?"), textField("ppe.conjointPays","Dans quel pays ?")]);
+    }
+  }
+
+  html += yesNoField("ppe.famille","Une personne de votre famille ou de votre entourage proche exerce-t-elle, ou a-t-elle exercé au cours des 12 derniers mois, une telle fonction ?");
+  if(state.ppe.famille===true){
+    html += fieldRow([textField("ppe.familleFonction","Quelle fonction ?"), textField("ppe.famillePays","Dans quel pays ?")]);
+  }
+
+  if(state.personType==="morale"){
+    html += textareaField("beneficiaires","Personnes physiques détenant directement ou indirectement plus de 25% du capital ou des droits de vote (nom et %)") +
+      textareaField("controle","Personnes exerçant un pouvoir de contrôle sur la direction de la société");
+  }
+
+  html += '<div class="field" style="margin-top:26px"><label class="flabel">Montant des capitaux envisagés</label></div>' +
+    fieldRow([
+      numFieldSuffix("fonds.montant","Montant envisagé","€"),
+      selectField("fonds.origine","Origine géographique des fonds",["france","etranger"], {france:"France métropolitaine", etranger:"Hors France métropolitaine"})
+    ]) +
+    (state.fonds.origine==="etranger" ? fieldRow([textField("fonds.origineDetail","Précisez le pays / l'établissement")]) : "");
+
+  html += '<div class="field"><label class="flabel">Nature de l\'origine des fonds <span class="opt">(plusieurs choix possibles)</span></label>' +
+    '<div class="chips">' +
+    multiChip("fonds.natures","transfert","Transfert d'épargne") +
+    multiChip("fonds.natures","vm","Vente de valeurs mobilières") +
+    multiChip("fonds.natures","immo","Vente d'un bien immobilier") +
+    multiChip("fonds.natures","epargne","Épargne") +
+    multiChip("fonds.natures","heritage","Héritage / succession") +
+    multiChip("fonds.natures","salaires","Salaires") +
+    multiChip("fonds.natures","autre","Autre") +
+    '</div></div>' +
+    (state.fonds.natures.indexOf("autre")>-1 ? fieldRow([textField("fonds.autreNature","Précisez")]) : "");
+
+  html += navButtons();
+  return html;
+}
+
+/* ---------- STEP 3 : PATRIMOINE ---------- */
+function stepPatrimoine(){
+  var isPM = state.personType==="morale";
+  var html = '<div class="eyebrow">Étape 3 / 7</div><h2 class="step-title">Votre situation patrimoniale</h2>' +
+    '<p class="step-intro">Ces montants (approximatifs, en milliers d\'euros) nous permettent de vérifier que votre projet d\'investissement reste cohérent avec l\'ensemble de votre patrimoine — c\'est une obligation du \"test d\'adéquation\". Vous pouvez laisser une case vide si vous préférez en discuter directement avec votre conseiller.</p>';
+
+  if(!isPM){
+    html += subhead("Actifs immobiliers (K€)") +
+      fieldRow([kField("pp.residencePrincipale","Résidence principale"), kField("pp.residenceSecondaire","Résidence(s) secondaire(s)")]) +
+      fieldRow([kField("pp.immobilierInvest","Immobilier d'investissement"), kField("pp.autresImmo","Autres (SCI, SCPI…)")]) +
+      subhead("Actifs financiers (K€)") +
+      fieldRow([kField("pp.assuranceVie","Assurance vie / capitalisation"), kField("pp.comptesTitres","Comptes-titres, PEA")]) +
+      fieldRow([kField("pp.epargneLogement","Épargne logement (PEL, CEL)"), kField("pp.epargneSalariale","Épargne salariale")]) +
+      fieldRow([kField("pp.autresFinanciers","Autres actifs financiers"), kField("pp.actifsPro","Actifs professionnels")]) +
+      fieldRow([kField("pp.liquidites","Liquidités")]) +
+      statTile("Patrimoine total estimé", patrimoineTotal()) +
+      subhead("Revenus et charges annuels (K€)") +
+      fieldRow([kField("pp.revenusPro","Revenus professionnels"), kField("pp.chargesEmprunt","Charges — emprunt(s)")]) +
+      fieldRow([kField("pp.revenusLocatifs","Revenus locatifs"), kField("pp.chargesPension","Charges — pension(s)")]) +
+      fieldRow([kField("pp.revenusVM","Revenus de valeurs mobilières"), kField("pp.chargesCourantes","Dépenses courantes")]) +
+      fieldRow([kField("pp.revenusAutres","Autres revenus"), kField("pp.chargesAutres","Autres charges")]) +
+      subhead("Situation fiscale (K€) — optionnel") +
+      fieldRow([kField("pp.impotRevenu","Impôt sur le revenu"), kField("pp.impotLocatif","Impôts locatifs")]) +
+      fieldRow([kField("pp.impotVM","Impôts sur valeurs mobilières")]);
+  } else {
+    html += subhead("Actifs immobiliers (K€)") +
+      fieldRow([kField("pm.locauxPro","Locaux professionnels"), kField("pm.immobilierInvest","Immobilier d'investissement")]) +
+      fieldRow([kField("pm.autresImmo","Autres (SCI, SCPI…)")]) +
+      subhead("Actifs financiers et trésorerie (K€)") +
+      fieldRow([kField("pm.comptesTitres","Comptes-titres"), kField("pm.autresFinanciers","Autres actifs financiers")]) +
+      fieldRow([kField("pm.autresActifs","Autres actifs"), kField("pm.tresorerie","Trésorerie")]) +
+      statTile("Actifs totaux estimés", patrimoineTotal()) +
+      subhead("Produits et charges annuels (K€)") +
+      fieldRow([kField("pm.produitsExploitation","Produits d'exploitation"), kField("pm.chargesExploitation","Charges d'exploitation")]) +
+      fieldRow([kField("pm.produitsFinanciers","Produits financiers"), kField("pm.chargesFinancieres","Charges financières")]) +
+      fieldRow([kField("pm.produitsExceptionnels","Produits exceptionnels"), kField("pm.chargesExceptionnelles","Charges exceptionnelles")]) +
+      subhead("Situation fiscale (K€)") +
+      fieldRow([kField("pm.impot","Impôt (IS, BNC, BIC, BA)")]);
+  }
+
+  var montant = n(state.fonds.montant);
+  var total = patrimoineTotal()*1000;
+  if(montant>0 && total>0){
+    var ratio = Math.round((montant/total)*100);
+    html += '<div class="info"><span class="ic">💡</span><div>Le montant envisagé (<b>'+fmt(montant)+' €</b>) représente environ <b>'+ratio+'%</b> de votre patrimoine total estimé. Votre conseiller en tiendra compte dans ses recommandations.</div></div>';
+  }
+
+  html += navButtons();
+  return html;
+}
+function patrimoineTotal(){
+  var isPM = state.personType==="morale";
+  if(!isPM){
+    var pp = state.pp;
+    return n(pp.residencePrincipale)+n(pp.residenceSecondaire)+n(pp.immobilierInvest)+n(pp.autresImmo)+
+      n(pp.assuranceVie)+n(pp.comptesTitres)+n(pp.epargneLogement)+n(pp.epargneSalariale)+n(pp.autresFinanciers)+
+      n(pp.actifsPro)+n(pp.liquidites);
+  } else {
+    var pm = state.pm;
+    return n(pm.locauxPro)+n(pm.immobilierInvest)+n(pm.autresImmo)+n(pm.comptesTitres)+n(pm.autresFinanciers)+
+      n(pm.autresActifs)+n(pm.tresorerie);
+  }
+}
+
+/* ---------- STEP 4 : CONNAISSANCE ---------- */
+function stepConnaissance(){
+  var html = '<div class="eyebrow">Étape 4 / 7</div><h2 class="step-title">Vos connaissances et votre expérience</h2>' +
+    '<p class="step-intro">Pour chaque instrument, indiquez si vous en connaissez les risques et le nombre d\'opérations réalisées ces 12 derniers mois.</p>' +
+    '<div class="instr">';
+
+  INSTRUMENTS.forEach(function(ins){
+    var v = state.instruments[ins.k];
+    html += '<div class="irow">' +
+      '<div class="iname">'+ins.n+'</div><div class="idesc">'+ins.d+'</div>' +
+      '<div class="icontrols">' +
+        '<div class="iyn">' +
+          ynBtn("instruments."+ins.k+".connait", true, v.connait, "Je connais") +
+          ynBtn("instruments."+ins.k+".connait", false, v.connait, "Je ne connais pas") +
+        '</div>' +
+        '<div class="iops"><span class="iops-label">Opérations (12 mois) :</span>' +
+          opsBtn("instruments."+ins.k+".ops","aucune",v.ops,"Aucune") +
+          opsBtn("instruments."+ins.k+".ops","1",v.ops,"Au moins 1") +
+          opsBtn("instruments."+ins.k+".ops","5",v.ops,"Au moins 5") +
+        '</div>' +
+      '</div></div>';
+  });
+  html += '</div>';
+
+  html += yesNoField("gereSeul","Gérez-vous vous-même votre portefeuille ?");
+  if(state.gereSeul===true){ html += fieldRow([textField("gereSeulDepuis","Depuis combien de temps ?")]); }
+  html += yesNoField("mandatGestion","Avez-vous (ou avez-vous déjà eu) un portefeuille géré sous mandat ?");
+  html += yesNoField("experiencePro","Avez-vous exercé, pendant au moins un an, une activité professionnelle exigeant une connaissance des instruments financiers ?");
+  html += yesNoField("gains","Avez-vous déjà réalisé des gains sur des produits financiers ?");
+  html += yesNoField("pertes","Avez-vous déjà subi des pertes sur des produits financiers ?");
+  html += yesNoField("conscienceRisque","Avez-vous conscience des pertes en capital possibles liées aux investissements sur les marchés financiers ?");
+
+  html += navButtons();
+  return html;
+}
+
+/* ---------- STEP 5 : OBJECTIFS ---------- */
+function stepObjectifs(){
+  var isPM = state.personType==="morale";
+  var labels = isPM ? OBJ_LABELS_MORALE : OBJ_LABELS_PHYSIQUE;
+  var order = isPM ? state.objOrderMorale : state.objOrder;
+  var orderKey = isPM ? "objOrderMorale" : "objOrder";
+
+  var html = '<div class="eyebrow">Étape 5 / 7</div><h2 class="step-title">Vos objectifs et votre horizon</h2>' +
+    '<p class="step-intro">Classez ces objectifs du plus important (en haut) au moins important pour vous, à l\'aide des flèches.</p>' +
+    '<div class="ranklist">';
+
+  order.forEach(function(key, idx){
+    html += '<div class="rankitem"><div class="ranknum">'+(idx+1)+'</div><div class="ranktext">'+labels[key]+'</div>' +
+      '<div class="rankbtns">' +
+      '<button data-action="rankup" data-orderkey="'+orderKey+'" data-idx="'+idx+'" '+(idx===0?"disabled":"")+'>↑</button>' +
+      '<button data-action="rankdown" data-orderkey="'+orderKey+'" data-idx="'+idx+'" '+(idx===order.length-1?"disabled":"")+'>↓</button>' +
+      '</div></div>';
+  });
+  html += '</div>';
+
+  html += '<div class="field" style="margin-top:24px"><label class="flabel">Votre horizon d\'investissement</label>';
+  var horizons = [
+    {k:"court", t:"Court terme", d:"Moins de 2 ans"},
+    {k:"moyen", t:"Moyen terme", d:"De 2 à 5 ans"},
+    {k:"long", t:"Long terme", d:"De 5 à 8 ans"},
+    {k:"tlong", t:"Très long terme", d:"Plus de 8 ans"}
+  ];
+  horizons.forEach(function(h){
+    html += optCard("horizon", h.k, state.horizon, h.t, h.d);
+  });
+  html += '</div>';
+
+  html += textareaField("projetsCourtTerme","Avez-vous des projets à court terme ou des besoins en revenus réguliers à nous signaler ? (optionnel)");
+
+  html += navButtons();
+  return html;
+}
+
+/* ---------- STEP 6 : DURABILITE (ESG) ---------- */
+function stepDurabilite(){
+  var html = '<div class="eyebrow">Étape 6 / 7</div><h2 class="step-title">Vos préférences en matière de durabilité</h2>' +
+    '<p class="step-intro">Depuis 2022, la réglementation nous impose de recueillir vos préférences en matière de durabilité (critères Environnementaux, Sociaux et de Gouvernance — ESG).</p>';
+
+  html += '<div class="field"><label class="flabel">Souhaitez-vous inclure une dimension ESG dans votre projet d\'investissement ?</label>' +
+    optCard("esg.inclure","oui",state.esg.inclure,"Oui","J'attache de l'importance à ces critères") +
+    optCard("esg.inclure","non",state.esg.inclure,"Non","Ce n'est pas un critère pour moi") +
+    optCard("esg.inclure","nonExprime",state.esg.inclure,"Je ne me suis pas encore exprimé(e)","Nous pourrons en reparler ensemble") +
+  '</div>';
+
+  if(state.esg.inclure==="oui"){
+    html += '<div class="field"><label class="flabel">Souhaitez-vous privilégier une thématique en particulier ? <span class="opt">(optionnel)</span></label><div class="chips">' +
+      chip("esg.thematique","environnementale",state.esg.thematique,"Environnementale") +
+      chip("esg.thematique","sociale",state.esg.thematique,"Sociale") +
+      chip("esg.thematique","gouvernance",state.esg.thematique,"Bonne gouvernance") +
+    '</div></div>';
+  }
+
+  html += '<div class="field"><label class="flabel">Concernant les fonds sur lesquels vous seriez investi(e), quelle serait votre position sur la répartition par article SFDR ?</label>' +
+    optCard("esg.sfdr","convient",state.esg.sfdr,"Cela me convient","Je n'ai pas de demande particulière sur ce point") +
+    optCard("esg.sfdr","pasImportant",state.esg.sfdr,"Je n'y attache pas d'importance","") +
+    optCard("esg.sfdr","revoir",state.esg.sfdr,"Je souhaite en revoir la répartition","À discuter avec mon conseiller") +
+  '</div>';
+
+  html += '<div class="field"><label class="flabel">Souhaiteriez-vous que l\'on vous propose davantage d\'investissements à impact et/ou de fonds labellisés ?</label>' +
+    optCard("esg.impact","non",state.esg.impact,"Non, je suis satisfait(e) de la situation actuelle","") +
+    optCard("esg.impact","oui",state.esg.impact,"Oui, j'aimerais qu'on m'en propose davantage","") +
+  '</div>';
+
+  html += navButtons();
+  return html;
+}
+
+/* ---------- STEP 7 : PROFIL DE RISQUE ---------- */
+function stepProfil(){
+  var html = '<div class="eyebrow">Étape 7 / 7</div><h2 class="step-title">Votre rapport au risque</h2>' +
+    '<p class="step-intro">Ces trois questions nous aident à cerner votre tolérance au risque. Le profil obtenu est indicatif : votre conseiller le validera avec vous lors de votre échange.</p>';
+
+  html += '<div class="field"><label class="flabel">Pour un investissement de 100 000 €, quelle baisse temporaire seriez-vous prêt(e) à accepter ?</label>' +
+    optCard("risque.perte","p1",state.risque.perte,"Jusqu'à 10 000 €","Profil prudent") +
+    optCard("risque.perte","p2",state.risque.perte,"Jusqu'à 20 000 €","Profil équilibré") +
+    optCard("risque.perte","p3",state.risque.perte,"Jusqu'à 30 000 €","Profil dynamique") +
+    optCard("risque.perte","p4",state.risque.perte,"Plus de 30 000 €","Profil offensif / discrétionnaire") +
+  '</div>';
+
+  html += '<div class="field"><label class="flabel">Si la valeur de vos investissements chutait brusquement, quelle serait votre réaction ?</label>' +
+    optCard("risque.reaction","vendre",state.risque.reaction,"Je vends pour limiter mes pertes","") +
+    optCard("risque.reaction","conserver",state.risque.reaction,"Je conserve, dans une optique de long terme","") +
+    optCard("risque.reaction","investir",state.risque.reaction,"J'en profite pour investir davantage","") +
+  '</div>';
+
+  html += '<div class="field"><label class="flabel">Quel couple rendement / risque vous correspond le mieux ?</label>' +
+    optCard("risque.rendement","r1",state.risque.rendement,"Viser 3% de performance, en acceptant jusqu'à 6% de perte","") +
+    optCard("risque.rendement","r2",state.risque.rendement,"Viser 5% de performance, en acceptant jusqu'à 10% de perte","") +
+    optCard("risque.rendement","r3",state.risque.rendement,"Viser 15% de performance, en acceptant jusqu'à 30% de perte","") +
+  '</div>';
+
+  if(state.risque.perte && state.risque.reaction && state.risque.rendement){
+    html += profileBlock(computeProfile());
+  }
+
+  html += navButtons({nextLabel:"Voir mon bilan →"});
+  return html;
+}
+
+function computeProfile(){
+  var s1 = {p1:1,p2:2,p3:3,p4:4}[state.risque.perte] || 0;
+  var s2 = {vendre:1,conserver:2.5,investir:4}[state.risque.reaction] || 0;
+  var s3 = {r1:1,r2:2.5,r3:4}[state.risque.rendement] || 0;
+  var avg = (s1+s2+s3)/3;
+  if(avg <= 1.6) return {name:"Prudent", txt:"Vous préférez des rendements modérés et réguliers (en moyenne 3%). Vous prenez peu de risques de perte en capital (en moyenne -6%). L'horizon de placement minimum recommandé est de 5 ans."};
+  if(avg <= 2.6) return {name:"Équilibré", txt:"Vous préférez valoriser votre capital et acceptez des rendements moyens (en moyenne 5%). Vous prenez des risques modérés de perte en capital (en moyenne -10%). L'horizon de placement minimum recommandé est de 5 ans."};
+  if(avg <= 3.5) return {name:"Dynamique", txt:"Vous préférez une valorisation active de votre capital et recherchez des rendements élevés (en moyenne 15%). Vous prenez des risques importants de perte en capital (en moyenne -30%). L'horizon de placement minimum recommandé est de 7 ans."};
+  return {name:"Offensif / Discrétionnaire", txt:"Vous acceptez des fluctuations élevées et des risques forts de moins-value, avec une grande latitude laissée à votre conseiller sur l'allocation. L'horizon de placement minimum recommandé est de 8 ans."};
+}
+
+function profileBlock(p){
+  return '<div class="profilecard"><div class="pname">Profil indicatif : '+p.name+'</div><p>'+p.txt+'</p>' +
+    '<div class="disclaimer">* Hypothèses non contractuelles, données à titre indicatif. Ce profil sera confirmé par votre conseiller IVO Capital Partners.</div></div>';
+}
+
+/* ---------- STEP 8 : RECAP ---------- */
+function stepRecap(){
+  var missing = [];
+  if(state.personType==="physique" && !state.nom) missing.push("votre nom");
+  if(state.personType==="morale" && !state.morale.denomination) missing.push("la dénomination de votre société");
+  if(!state.contact.email) missing.push("votre email");
+
+  var html = '<div class="eyebrow">Bilan</div><h2 class="step-title">Votre synthèse</h2>' +
+    '<p class="step-intro">Voici le récapitulatif de vos réponses. Vous pouvez encore modifier chaque section, puis transmettre cette synthèse à votre conseiller — il s\'appuiera sur celle-ci pour finaliser votre dossier ; vous n\'aurez ensuite qu\'à le valider.</p>';
+
+  if(missing.length){
+    html += '<div class="banner-warn">Merci de compléter '+missing.join(" et ")+' pour permettre à votre conseiller de vous recontacter (<a data-action="goto" data-step="0" href="#">modifier</a>).</div>';
+  }
+
+  html += recapSection(0,"Identité", identiteRecapRows());
+  html += recapSection(1,"Vigilance réglementaire", vigilanceRecapRows());
+  html += recapSection(2,"Patrimoine", patrimoineRecapRows());
+  html += recapSection(3,"Connaissances & expérience", connaissanceRecapRows());
+  html += recapSection(4,"Objectifs & horizon", objectifsRecapRows());
+  html += recapSection(5,"Durabilité", durabiliteRecapRows());
+  html += recapSection(6,"Profil de risque", profilRecapRows());
+
+  html += '<div class="field"><label class="flabel">Votre conseiller IVO Capital Partners</label>' +
+    '<select data-bind="advisorEmail">' +
+      '<option value="">— Sélectionner votre conseiller —</option>' +
+      (window.IVO_CONFIG && window.IVO_CONFIG.ADVISORS ? window.IVO_CONFIG.ADVISORS.map(function(a){
+        return '<option value="'+esc(a.email)+'"'+(state.advisorEmail===a.email?" selected":"")+'>'+esc(a.name)+'</option>';
+      }).join("") : "") +
+    '</select></div>';
+
+  html += '<div class="checkline"><input type="checkbox" id="certifie" data-action="check" data-path="certifie" '+(state.certifie?"checked":"")+'>' +
+    '<label for="certifie">Je certifie que les informations renseignées ci-dessus sont exactes et sincères, et je m\'engage à informer IVO Capital Partners de toute modification significative de ma situation.</label></div>';
+
+  var canSend = state.certifie && !missing.length && !!state.advisorEmail;
+  html += '<div class="finalbox" id="finalbox">' +
+    (state.sentAt ?
+      '<div class="finalbox-title" style="color:var(--success)">✓ Envoyé le '+new Date(state.sentAt).toLocaleString('fr-FR')+'</div>' +
+      '<p class="finalbox-text">Votre conseiller a reçu automatiquement votre fiche pré-remplie par email. Vous n\'avez rien d\'autre à faire.</p>'
+      :
+      '<div class="finalbox-title">Dernière étape</div>' +
+      '<p class="finalbox-text">Votre fiche sera automatiquement transmise, au format PDF officiel, à votre conseiller. Aucune autre action de votre part.</p>'
+    ) +
+    '<div class="actionrow" style="justify-content:center">' +
+      '<button class="btn btn-primary btn-large" id="sendBtn" data-action="submitToAdvisor"'+(canSend?"":" disabled")+'>✉ '+(state.sentAt?"Renvoyer à mon conseiller":"Terminer et envoyer à mon conseiller")+'</button>' +
+    '</div>' +
+    (!canSend ? '<div class="finalbox-hint">'+(missing.length ? "Complétez les champs manquants ci-dessus" : !state.advisorEmail ? "Sélectionnez votre conseiller ci-dessus" : "Cochez la case de certification ci-dessus")+' pour activer l\'envoi.</div>' : '') +
+    '<div id="sendError"></div>' +
+  '</div>' +
+  '<div class="actionrow actionrow-secondary">' +
+    '<button class="btn btn-ghost" data-action="downloadPdf">📄 Garder une copie du PDF</button>' +
+    '<button class="btn btn-ghost" data-action="copy">📋 Copier la synthèse (texte)</button>' +
+  '</div>';
+
+  html += '<div class="navrow"><button class="btn btn-ghost" data-action="prev">← Précédent</button><span></span></div>';
+  return html;
+}
+
+function recapSection(step, title, rows){
+  var body = '<table><tbody>';
+  rows.forEach(function(r){ body += '<tr><td class="k">'+r[0]+'</td><td class="v">'+ (r[1] || "—") +'</td></tr>'; });
+  body += '</tbody></table>';
+  return '<div class="recap-sec"><div class="recap-head"><h3>'+title+'</h3><a href="#" data-action="goto" data-step="'+step+'">Modifier</a></div><div class="recap-body"><div class="kdiv">'+body+'</div></div></div>';
+}
+
+function yn(v){ return v===true?"Oui":v===false?"Non":null; }
+
+function identiteRecapRows(){
+  if(state.personType==="physique"){
+    var rows = [
+      ["Nom complet", esc(state.prenom+" "+state.nom)],
+      ["Date de naissance", esc(state.dateNaissance)],
+      ["Profession", esc(state.profession)],
+      ["Situation de famille", esc(state.situationFamille)+(state.regimeMatrimonial?" — "+esc(state.regimeMatrimonial):"")],
+      ["Enfants / personnes à charge", esc(state.nbEnfants)],
+      ["Email", esc(state.contact.email)],
+      ["Téléphone", esc(state.contact.telephone)]
+    ];
+    if(state.renseignerConjoint){ rows.push(["Conjoint", esc(state.conjoint.prenom+" "+state.conjoint.nom+" ("+state.conjoint.dateNaissance+")")]); }
+    return rows;
+  }
+  return [
+    ["Dénomination", esc(state.morale.denomination)],
+    ["Forme juridique", esc(state.morale.formeJuridique)],
+    ["RCS", esc(state.morale.rcs)],
+    ["Activité", esc(state.morale.activite)],
+    ["Régime fiscal", esc(state.morale.regimeFiscal)],
+    ["Représentant", esc(state.morale.repPrenom+" "+state.morale.repNom+" — "+state.morale.repFonction)],
+    ["Email", esc(state.contact.email)],
+    ["Téléphone", esc(state.contact.telephone)]
+  ];
+}
+function vigilanceRecapRows(){
+  var rows = [["Personne politiquement exposée (vous)", yn(state.ppe.vous)]];
+  if(state.ppe.vous) rows.push(["→ Fonction / pays", esc(state.ppe.vousFonction+" / "+state.ppe.vousPays)]);
+  if(state.ppe.conjointPPE!=null) rows.push(["Conjoint PPE", yn(state.ppe.conjointPPE)]);
+  rows.push(["Entourage PPE", yn(state.ppe.famille)]);
+  rows.push(["Montant envisagé", state.fonds.montant ? fmt(state.fonds.montant)+" €" : null]);
+  rows.push(["Origine géographique", state.fonds.origine==="france"?"France métropolitaine":("Hors France — "+esc(state.fonds.origineDetail))]);
+  rows.push(["Nature des fonds", state.fonds.natures.length ? esc(state.fonds.natures.join(", ")) : null]);
+  return rows;
+}
+function patrimoineRecapRows(){
+  var rows = [["Patrimoine total estimé", patrimoineTotal()>0 ? fmt(patrimoineTotal())+" K€" : null]];
+  var src = state.personType==="morale" ? state.pm : state.pp;
+  for(var k in src){ if(src[k]!=="" && src[k]!=null){ rows.push([k, fmt(src[k])+" K€"]); } }
+  return rows;
+}
+function connaissanceRecapRows(){
+  var rows = [];
+  INSTRUMENTS.forEach(function(ins){
+    var v = state.instruments[ins.k];
+    if(v.connait!=null || v.ops!=null){
+      rows.push([ins.n, (v.connait===true?"Connaît":v.connait===false?"Ne connaît pas":"—") + (v.ops?" · "+({aucune:"aucune opération",1:"≥1 opération",5:"≥5 opérations"}[v.ops]):"")]);
+    }
+  });
+  rows.push(["Gère seul son portefeuille", yn(state.gereSeul)]);
+  rows.push(["Déjà eu un mandat de gestion", yn(state.mandatGestion)]);
+  rows.push(["Expérience professionnelle finance", yn(state.experiencePro)]);
+  rows.push(["Gains déjà réalisés", yn(state.gains)]);
+  rows.push(["Pertes déjà subies", yn(state.pertes)]);
+  rows.push(["Conscience du risque de perte en capital", yn(state.conscienceRisque)]);
+  return rows;
+}
+function objectifsRecapRows(){
+  var isPM = state.personType==="morale";
+  var labels = isPM?OBJ_LABELS_MORALE:OBJ_LABELS_PHYSIQUE;
+  var order = isPM?state.objOrderMorale:state.objOrder;
+  var rows = [["Priorités (1 = la plus importante)", order.map(function(k,i){return (i+1)+". "+labels[k];}).join(" · ")]];
+  var hMap={court:"Court terme (- de 2 ans)",moyen:"Moyen terme (2 à 5 ans)",long:"Long terme (5 à 8 ans)",tlong:"Très long terme (+ de 8 ans)"};
+  rows.push(["Horizon d'investissement", state.horizon?hMap[state.horizon]:null]);
+  rows.push(["Projets court terme / besoins de revenus", esc(state.projetsCourtTerme)]);
+  return rows;
+}
+function durabiliteRecapRows(){
+  var incMap={oui:"Oui",non:"Non",nonExprime:"Ne s'est pas exprimé"};
+  var themMap={environnementale:"Environnementale",sociale:"Sociale",gouvernance:"Bonne gouvernance"};
+  var sfdrMap={convient:"La répartition me convient",pasImportant:"Je n'y attache pas d'importance",revoir:"Je souhaite la revoir"};
+  var impMap={non:"Satisfait(e) de la situation actuelle",oui:"Souhaite davantage d'investissements à impact"};
+  return [
+    ["Inclusion de critères ESG", state.esg.inclure?incMap[state.esg.inclure]:null],
+    ["Thématique privilégiée", state.esg.thematique?themMap[state.esg.thematique]:null],
+    ["Répartition SFDR", state.esg.sfdr?sfdrMap[state.esg.sfdr]:null],
+    ["Investissements à impact", state.esg.impact?impMap[state.esg.impact]:null]
+  ];
+}
+function profilRecapRows(){
+  var rows = [];
+  var perteMap={p1:"Jusqu'à 10 000 €",p2:"Jusqu'à 20 000 €",p3:"Jusqu'à 30 000 €",p4:"Plus de 30 000 €"};
+  var reacMap={vendre:"Vend pour limiter les pertes",conserver:"Conserve dans une optique long terme",investir:"En profite pour investir"};
+  var rendMap={r1:"3% visé / 6% de perte acceptée",r2:"5% visé / 10% de perte acceptée",r3:"15% visé / 30% de perte acceptée"};
+  rows.push(["Perte acceptée sur 100 000€", state.risque.perte?perteMap[state.risque.perte]:null]);
+  rows.push(["Réaction à une baisse brutale", state.risque.reaction?reacMap[state.risque.reaction]:null]);
+  rows.push(["Couple rendement / risque", state.risque.rendement?rendMap[state.risque.rendement]:null]);
+  if(state.risque.perte && state.risque.reaction && state.risque.rendement){
+    rows.push(["Profil indicatif", "<b>"+computeProfile().name+"</b>"]);
+  }
+  return rows;
+}
+
+function buildSyntheseText(){
+  var lines = [];
+  lines.push("SYNTHÈSE — QUESTIONNAIRE DE CONNAISSANCE CLIENT");
+  lines.push("IVO Capital Partners — généré le " + new Date().toLocaleDateString('fr-FR'));
+  lines.push("");
+  function sec(title, rows){
+    lines.push("— " + title.toUpperCase() + " —");
+    rows.forEach(function(r){
+      var v = (r[1]||"—").replace(/<[^>]+>/g,"");
+      lines.push(r[0] + " : " + v);
+    });
+    lines.push("");
+  }
+  sec("Identité", identiteRecapRows());
+  sec("Vigilance réglementaire", vigilanceRecapRows());
+  sec("Patrimoine", patrimoineRecapRows());
+  sec("Connaissances & expérience", connaissanceRecapRows());
+  sec("Objectifs & horizon", objectifsRecapRows());
+  sec("Durabilité", durabiliteRecapRows());
+  sec("Profil de risque", profilRecapRows());
+  lines.push("Le client certifie l'exactitude des informations : " + (state.certifie ? "Oui" : "Non — à confirmer"));
+  return lines.join("\n");
+}
+
+/* ---------- field helpers ---------- */
+function fieldRow(fields){ return '<div class="field-row">'+fields.join("")+'</div>'; }
+function subhead(t){ return '<h3 style="font-size:14px;margin:22px 0 12px;color:var(--brand)">'+t+'</h3>'; }
+function textField(path,label,ph,req){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+(req?'':' <span class="opt">(optionnel)</span>')+'</label>'+
+    '<input type="text" data-bind="'+path+'" value="'+esc(v)+'" placeholder="'+esc(ph||"")+'"></div>';
+}
+function dateField(path,label){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+' <span class="opt">(optionnel)</span></label>'+
+    '<input type="date" data-bind="'+path+'" value="'+esc(v)+'"></div>';
+}
+function emailField(path,label,req){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+(req?'':' <span class="opt">(optionnel)</span>')+'</label>'+
+    '<input type="email" data-bind="'+path+'" value="'+esc(v)+'"></div>';
+}
+function telField(path,label){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+' <span class="opt">(optionnel)</span></label>'+
+    '<input type="tel" data-bind="'+path+'" value="'+esc(v)+'"></div>';
+}
+function numField(path,label){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+' <span class="opt">(optionnel)</span></label>'+
+    '<input type="number" min="0" data-bind="'+path+'" value="'+esc(v)+'"></div>';
+}
+function numFieldSuffix(path,label,suffix){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+'</label><div class="suffix-wrap">'+
+    '<input type="number" min="0" data-bind="'+path+'" value="'+esc(v)+'"><span class="suffix">'+suffix+'</span></div></div>';
+}
+function kField(path,label){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+'</label><div class="suffix-wrap">'+
+    '<input type="number" min="0" class="patr-input" data-bind="'+path+'" value="'+esc(v)+'"><span class="suffix">K€</span></div></div>';
+}
+function textareaField(path,label){
+  var v = getPath(state,path)||"";
+  return '<div class="field"><label class="flabel">'+label+'</label><textarea data-bind="'+path+'">'+esc(v)+'</textarea></div>';
+}
+function selectField(path,label,options,labelMap){
+  var v = getPath(state,path)||"";
+  var opts = options.map(function(o){
+    var lbl = labelMap ? (labelMap[o]||o) : o;
+    return '<option value="'+esc(o)+'"'+(v===o?" selected":"")+'>'+(o===""?"— Sélectionner —":esc(lbl))+'</option>';
+  }).join("");
+  return '<div class="field"><label class="flabel">'+label+' <span class="opt">(optionnel)</span></label>'+
+    '<select data-bind="'+path+'">'+opts+'</select></div>';
+}
+function checkline(path,label){
+  var v = getPath(state,path);
+  return '<div class="checkline"><input type="checkbox" data-action="check" data-path="'+path+'" '+(v?"checked":"")+' id="cl-'+path+'">'+
+    '<label for="cl-'+path+'">'+label+'</label></div>';
+}
+function yesNoField(path,label,infoText){
+  var v = getPath(state,path);
+  return '<div class="field"><label class="flabel">'+label+'</label><div class="chips">' +
+    '<button class="chip'+(v===true?" on":"")+'" data-action="setbool" data-path="'+path+'" data-value="true">Oui</button>' +
+    '<button class="chip'+(v===false?" on":"")+'" data-action="setbool" data-path="'+path+'" data-value="false">Non</button>' +
+    '</div>' + (infoText ? '<div class="info"><span class="ic">ℹ️</span><div>'+infoText+'</div></div>' : '') + '</div>';
+}
+function multiChip(path,val,label){
+  var arr = getPath(state,path)||[];
+  var on = arr.indexOf(val)>-1;
+  return '<button class="chip'+(on?" on":"")+'" data-action="togglearr" data-path="'+path+'" data-value="'+val+'">'+label+'</button>';
+}
+function chip(path,val,current,label){
+  return '<button class="chip'+(current===val?" on":"")+'" data-action="set" data-path="'+path+'" data-value="'+val+'">'+label+'</button>';
+}
+function optCard(path,val,current,title,desc){
+  return '<div class="optcard'+(current===val?" on":"")+'" data-action="set" data-path="'+path+'" data-value="'+val+'">'+
+    '<div class="ot">'+title+'</div>'+(desc?'<div class="od">'+desc+'</div>':'')+'</div>';
+}
+function ynBtn(path,val,current,label){
+  return '<button class="'+(current===val?"on":"")+'" data-action="setbool" data-path="'+path+'" data-value="'+val+'">'+label+'</button>';
+}
+function opsBtn(path,val,current,label){
+  return '<button class="'+(current===val?"on":"")+'" data-action="set" data-path="'+path+'" data-value="'+val+'">'+label+'</button>';
+}
+function statTile(label, value){
+  return '<div class="stattile"><span class="sl">'+label+'</span><span class="sv tabular">'+fmt(value)+' <small>K€</small></span></div>';
+}
+
+/* ---------- events ---------- */
+function bindEvents(){
+  var app = document.getElementById("app");
+
+  app.querySelectorAll("[data-bind]").forEach(function(el){
+    el.addEventListener("input", function(){
+      setPath(state, el.getAttribute("data-bind"), el.value);
+      save();
+      if(el.tagName==="SELECT"){ render(false); return; }
+      if(el.classList.contains("patr-input")){
+        var tile = app.querySelector(".stattile .sv");
+        if(tile){ tile.innerHTML = fmt(patrimoineTotal())+' <small>K€</small>'; }
+      }
+    });
+  });
+
+  app.querySelectorAll("[data-action]").forEach(function(el){
+    el.addEventListener("click", function(e){
+      e.preventDefault();
+      var action = el.getAttribute("data-action");
+      if(action==="start"){ state.step=0; visited[0]=true; save(); render(true); return; }
+      if(action==="toggleAdvisor"){ advisorPanelOpen = !advisorPanelOpen; render(false); return; }
+      if(action==="advisorCopyLink"){ copyText(window.location.href); return; }
+      if(action==="advisorMailto"){
+        var clientEmail = (state.advisorDraft.email||"").trim();
+        if(!clientEmail){ showToast("Merci de renseigner l'email du client"); return; }
+        var clientName = (state.advisorDraft.name||"").trim();
+        var advisor = advisorDisplayName();
+        var subject2 = "Votre questionnaire de connaissance client — IVO Capital Partners";
+        var body2 = "Bonjour"+(clientName?" "+clientName:"")+",\n\n"+
+          "Afin de préparer au mieux votre accompagnement, pourriez-vous prendre quelques minutes pour compléter ce questionnaire en ligne :\n"+
+          window.location.href+"\n\n"+
+          "Vos réponses restent strictement confidentielles et me permettront de mieux cerner votre situation et vos objectifs avant notre prochain échange.\n\n"+
+          "Bien à vous,\n"+advisor+"\nIVO Capital Partners";
+        window.location.href = "mailto:"+encodeURIComponent(clientEmail)+"?subject="+encodeURIComponent(subject2)+"&body="+encodeURIComponent(body2);
+        return;
+      }
+      if(action==="reset"){
+        if(confirm("Recommencer le questionnaire à zéro ? Vos réponses actuelles seront perdues.")){
+          state = defaultState(); visited={}; save(); render(true);
+        }
+        return;
+      }
+      if(action==="goto"){
+        visited[state.step]=true;
+        state.step = parseInt(el.getAttribute("data-step"),10);
+        visited[state.step]=true;
+        save(); render(true); return;
+      }
+      if(action==="next"){
+        visited[state.step]=true;
+        state.step = Math.min(STEPS.length-1, state.step+1);
+        visited[state.step]=true;
+        save(); render(true); return;
+      }
+      if(action==="prev"){
+        visited[state.step]=true;
+        state.step = Math.max(0, state.step-1);
+        visited[state.step]=true;
+        save(); render(true); return;
+      }
+      if(action==="set"){ setPath(state, el.getAttribute("data-path"), el.getAttribute("data-value")); save(); render(false); return; }
+      if(action==="setbool"){ setPath(state, el.getAttribute("data-path"), el.getAttribute("data-value")==="true"); save(); render(false); return; }
+      if(action==="check"){ setPath(state, el.getAttribute("data-path"), el.checked); save(); render(false); return; }
+      if(action==="togglearr"){
+        var path = el.getAttribute("data-path"), val = el.getAttribute("data-value");
+        var arr = getPath(state,path);
+        var idx = arr.indexOf(val);
+        if(idx>-1) arr.splice(idx,1); else arr.push(val);
+        save(); render(false); return;
+      }
+      if(action==="rankup" || action==="rankdown"){
+        var ok = el.getAttribute("data-orderkey"), i0 = parseInt(el.getAttribute("data-idx"),10);
+        var arr2 = state[ok];
+        var j = action==="rankup" ? i0-1 : i0+1;
+        if(j>=0 && j<arr2.length){ var tmp=arr2[i0]; arr2[i0]=arr2[j]; arr2[j]=tmp; }
+        save(); render(false); return;
+      }
+      if(action==="copy"){
+        var txt = buildSyntheseText();
+        copyText(txt);
+        return;
+      }
+      if(action==="download"){
+        downloadSynthese();
+        return;
+      }
+      if(action==="downloadPdf"){
+        if(el.disabled) return;
+        downloadFilledPdf(el);
+        return;
+      }
+      if(action==="submitToAdvisor"){
+        if(el.disabled) return;
+        submitToAdvisorFlow(el);
+        return;
+      }
+    });
+  });
+}
+
+function copyText(txt){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(function(){ showToast("Synthèse copiée ✓"); })
+      .catch(function(){ fallbackCopy(txt); });
+  } else { fallbackCopy(txt); }
+}
+function fallbackCopy(txt){
+  try{
+    var ta = document.createElement("textarea");
+    ta.value = txt; ta.style.position="fixed"; ta.style.opacity="0";
+    document.body.appendChild(ta); ta.select();
+    document.execCommand("copy");
+    document.body.removeChild(ta);
+    showToast("Synthèse copiée ✓");
+  }catch(e){ showToast("Impossible de copier automatiquement"); }
+}
+
+function downloadSynthese(){
+  var txt = buildSyntheseText();
+  triggerDownload(new Blob([txt], {type:"text/plain;charset=utf-8"}), "synthese-connaissance-client.txt");
+  showToast("Fichier téléchargé ✓");
+}
+
+function triggerDownload(blob, filename){
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(function(){ URL.revokeObjectURL(url); }, 4000);
+}
+
+function downloadFilledPdf(btn){
+  var originalLabel = btn.textContent;
+  btn.disabled = true; btn.textContent = "Génération du PDF…";
+  IvoPdfFill.fillAnnexe4(state).then(function(bytes){
+    var clientLabel = state.personType==="morale" ? state.morale.denomination : (state.nom||"client");
+    var filename = "IVO-connaissance-client-" + (clientLabel||"client").replace(/[^a-zA-Z0-9-]+/g,"_") + ".pdf";
+    triggerDownload(new Blob([bytes], {type:"application/pdf"}), filename);
+    state.pdfDownloaded = true;
+    save();
+    showToast("PDF téléchargé ✓ — vous pouvez maintenant l'envoyer");
+    render(false);
+  }).catch(function(err){
+    console.error(err);
+    btn.disabled = false; btn.textContent = originalLabel;
+    showToast("Erreur lors de la génération du PDF");
+  });
+}
+
+function submitToAdvisorFlow(btn){
+  var originalLabel = btn.textContent;
+  var errBox = document.getElementById("sendError");
+  if(errBox) errBox.innerHTML = "";
+  btn.disabled = true; btn.textContent = "Envoi en cours…";
+  IvoPdfFill.fillAnnexe4(state).then(function(bytes){
+    return IvoSubmit.submitToAdvisor(state, bytes);
+  }).then(function(){
+    state.sentAt = Date.now();
+    save();
+    showToast("Envoyé à votre conseiller ✓");
+    render(false);
+  }).catch(function(err){
+    console.error(err);
+    btn.disabled = false; btn.textContent = originalLabel;
+    if(errBox){
+      errBox.innerHTML = '<div class="finalbox-hint">'+esc(err.message||"Une erreur est survenue.")+
+        ' — vous pouvez réessayer, ou <a href="#" id="fallbackDownload">télécharger le PDF</a> pour l\'envoyer vous-même en pièce jointe.</div>';
+      var fb = document.getElementById("fallbackDownload");
+      if(fb) fb.addEventListener("click", function(e){ e.preventDefault(); downloadFilledPdf(fb); });
+    }
+  });
+}
+
+render();
+})();
+</script>
+</body>
+</html>

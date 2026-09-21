@@ -1,0 +1,75 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Test fill conseiller</title>
+<style>body{margin:0;background:#888;} canvas{display:block;margin:10px auto;box-shadow:0 0 6px rgba(0,0,0,.5);}</style>
+</head>
+<body>
+<div id="status" style="position:fixed;top:0;left:0;background:#fff;padding:4px 8px;z-index:9;font-family:monospace;font-size:12px;"></div>
+<div id="out"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="../lib/pdf-fill.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+var clientAnswers = {
+  personType: "physique",
+  nom: "Bernard", prenom: "Julien",
+  dateNaissance: "1982-06-20",
+  situationFamille: "Marié(e)",
+  profession: "Ingénieur",
+  contact: {email:"julien.bernard@example.com", telephone:"0611223344"},
+  ppe: {vous:false, famille:false},
+  fonds: {montant:"180000"},
+  pp: {residencePrincipale:"420", liquidites:"30"},
+  pm: {},
+  gereSeul: true, experiencePro: false, horizon: "long",
+  risque: {perte:"p2", reaction:"conserver", rendement:"r1"},
+  esg: {inclure:"non"}
+};
+
+var advisorAnswers = {
+  aml: {
+    ppeBeneficiaires:false, listesSanctions:false, refusPieces:false, diligencesImpossibles:false,
+    rapatriementEtranger:false, relationDistance:true, paysRisque:false, changementsStatutaires:false,
+    interpositionPersonnes:false, transactionSousEvaluee:false, comportementAtypique:false,
+    societesEcran1:false, operationsIncoherentes:false, societesEcran2:false
+  },
+  profil: "equilibre",
+  preconisations: {
+    conseilInvestissement: {checked:true, note:"Profil équilibré, horizon long terme adapté à un contrat d'assurance vie multisupport diversifié entre fonds euros et unités de compte."},
+    gestionMandat: {checked:false, note:""},
+    rto: {checked:false, note:""},
+    assuranceVie: {checked:true, note:"Ouverture d'un contrat d'assurance vie recommandée compte tenu de l'horizon long terme."}
+  },
+  reconnaissance: {conseils:true, documentInfo:true, infosPrecontractuelles:true, courrierCategorisation:false},
+  lieu: "Paris", date: "2026-09-22"
+};
+
+(async function(){
+  try{
+    var bytes = await IvoPdfFill.fillAnnexe4(clientAnswers, advisorAnswers);
+    document.getElementById('status').textContent = 'filled OK, bytes=' + bytes.length;
+    var pdf = await pdfjsLib.getDocument({data: bytes}).promise;
+    var out = document.getElementById('out');
+    var params = new URLSearchParams(location.search);
+    var only = params.get('page');
+    var scaleParam = parseFloat(params.get('scale'));
+    var pagesToRender = only ? [parseInt(only,10)] : Array.from({length: pdf.numPages}, function(_,i){return i+1;});
+    for(var i=0;i<pagesToRender.length;i++){
+      var p = pagesToRender[i];
+      var page = await pdf.getPage(p);
+      var viewport = page.getViewport({scale: scaleParam || (only ? 2.0 : 1.4)});
+      var canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      canvas.dataset.page = p;
+      out.appendChild(canvas);
+      await page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise;
+    }
+    window.__filled = true;
+  }catch(e){
+    document.getElementById('status').textContent = 'ERROR: ' + e.message;
+    console.error(e);
+  }
+})();
+</script>
+</body></html>

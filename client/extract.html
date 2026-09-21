@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Extract</title></head>
+<body>
+<div id="status">loading...</div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+(async function(){
+  const pdf = await pdfjsLib.getDocument("../assets/annexe4-template.pdf").promise;
+  const out = [];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page = await pdf.getPage(p);
+    const tc = await page.getTextContent();
+    tc.items.forEach(it=>{
+      if(!it.str || !it.str.trim()) return;
+      out.push([p, Math.round(it.transform[4]*10)/10, Math.round(it.transform[5]*10)/10, Math.round(it.width*10)/10, it.str]);
+    });
+  }
+  document.getElementById('status').textContent = 'items=' + out.length;
+  const blob = new Blob([JSON.stringify(out)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'coords.json';
+  document.body.appendChild(a);
+  a.click();
+  window.__coords = out;
+})();
+</script>
+</body></html>

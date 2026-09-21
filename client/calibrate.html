@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Calibrate PDF coordinates</title>
+<style>
+body{font-family:monospace;font-size:11px;margin:0;background:#eee;}
+.pagewrap{position:relative;margin:20px auto;background:#fff;box-shadow:0 0 8px rgba(0,0,0,.3);}
+canvas{display:block;}
+.item{position:absolute;border:1px solid rgba(255,0,0,.4);white-space:nowrap;cursor:pointer;font-size:9px;line-height:1;color:rgba(0,0,150,.01);}
+.item:hover{background:rgba(255,255,0,.5);color:#000;z-index:5;}
+#log{white-space:pre;padding:10px;background:#fff;position:sticky;top:0;max-height:200px;overflow:auto;border-bottom:2px solid #333;z-index:10;}
+#pageSel{position:sticky;top:0;}
+</style>
+</head>
+<body>
+<div id="log">Click any highlighted text box to print its page/x/y/fontSize here. Page size also printed on load.</div>
+<div id="pages"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+var log = document.getElementById('log');
+function print(s){ log.textContent += "\n" + s; }
+
+pdfjsLib.getDocument("../assets/annexe4-template.pdf").promise.then(async function(pdf){
+  print("numPages=" + pdf.numPages);
+  var pagesDiv = document.getElementById('pages');
+  for(var p=1; p<=pdf.numPages; p++){
+    var page = await pdf.getPage(p);
+    var viewport = page.getViewport({scale: 1.5});
+    var wrap = document.createElement('div');
+    wrap.className = 'pagewrap';
+    wrap.style.width = viewport.width + 'px';
+    wrap.style.height = viewport.height + 'px';
+    var pageLabel = document.createElement('div');
+    pageLabel.textContent = "PAGE " + p + " — size(pt)=" + page.getViewport({scale:1}).width.toFixed(1) + "x" + page.getViewport({scale:1}).height.toFixed(1);
+    pageLabel.style.fontWeight = 'bold';
+    pageLabel.style.padding = '4px';
+    pagesDiv.appendChild(pageLabel);
+    pagesDiv.appendChild(wrap);
+
+    var canvas = document.createElement('canvas');
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    wrap.appendChild(canvas);
+    await page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise;
+
+    var textContent = await page.getTextContent();
+    textContent.items.forEach(function(item){
+      var tx = pdfjsLib.Util.transform(viewport.transform, item.transform);
+      var fontHeight = Math.hypot(tx[2], tx[3]);
+      var div = document.createElement('div');
+      div.className = 'item';
+      div.style.left = tx[4] + 'px';
+      div.style.top = (tx[5]-fontHeight) + 'px';
+      div.style.width = item.width*1.5 + 'px';
+      div.style.height = fontHeight + 'px';
+      div.textContent = item.str;
+      // store PDF-space (bottom-left origin, scale=1) coords for pdf-lib use
+      var pdfX = item.transform[4];
+      var pdfY = item.transform[5];
+      div.dataset.info = "page=" + p + " pdfX=" + pdfX.toFixed(1) + " pdfY=" + pdfY.toFixed(1) + " str=" + JSON.stringify(item.str);
+      div.addEventListener('click', function(){ print(this.dataset.info); });
+      wrap.appendChild(div);
+    });
+  }
+}).catch(function(e){ print("ERROR: " + e.message); console.error(e); });
+</script>
+</body>
+</html>

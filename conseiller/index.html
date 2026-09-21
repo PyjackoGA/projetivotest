@@ -1,0 +1,506 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Interface conseiller — IVO Capital Partners</title>
+<link rel="stylesheet" href="../lib/ivo-theme.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Libre+Franklin:wght@600;700;800&display=swap">
+<style>
+.wrap{max-width:920px;}
+.card{max-width:420px;margin:60px auto;}
+.card.wide{max-width:100%;}
+.login-field{margin-bottom:16px;}
+.topbar-user{margin-left:auto;display:flex;align-items:center;gap:10px;position:relative;z-index:1;}
+.topbar-user span{color:rgba(255,255,255,.85);font-size:12.5px;}
+.topbar-user button{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.3);color:#fff;font-size:12px;font-weight:600;padding:6px 12px;border-radius:5px;cursor:pointer;}
+.topbar-user button:hover{background:rgba(255,255,255,.22);}
+
+.subrow{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;}
+.sublist{display:flex;flex-direction:column;gap:10px;}
+.subitem{border:1px solid var(--border);border-radius:8px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--surface);cursor:pointer;transition:border-color .12s ease;}
+.subitem:hover{border-color:var(--navy);}
+.subitem-name{font-weight:700;font-size:14px;}
+.subitem-meta{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.badge{font-size:11px;font-weight:700;padding:4px 10px;border-radius:999px;white-space:nowrap;}
+.badge-recu{background:var(--blue-soft);color:var(--heading);border:1px solid var(--blue-soft-border);}
+.badge-complete{background:var(--success-soft);color:var(--success);border:1px solid var(--success);}
+.badge-encours{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);}
+.empty-state{text-align:center;padding:50px 20px;color:var(--text-muted);font-size:13.5px;}
+
+.section-title{font-size:15px;font-weight:800;color:var(--heading);margin:30px 0 4px;padding-top:22px;border-top:1px solid var(--border);}
+.section-title:first-child{margin-top:0;padding-top:0;border-top:none;}
+.section-sub{font-size:12.5px;color:var(--text-muted);margin:0 0 16px;}
+.readonly-grid{display:grid;grid-template-columns:1fr 1fr;gap:2px 24px;font-size:13px;}
+@media (max-width:640px){.readonly-grid{grid-template-columns:1fr;}}
+.readonly-grid .k{color:var(--text-muted);padding:5px 0;}
+.readonly-grid .v{font-weight:600;text-align:right;padding:5px 0;}
+@media (max-width:640px){.readonly-grid .v{text-align:left;margin-bottom:6px;}}
+
+.aml-row{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:10px 0;border-bottom:1px solid var(--border);}
+.aml-row:last-child{border-bottom:none;}
+.aml-label{font-size:12.5px;line-height:1.4;flex:1;}
+.aml-yn{display:flex;gap:6px;flex-shrink:0;}
+.aml-yn button{padding:5px 12px;font-size:12px;font-weight:600;border-radius:5px;border:1.5px solid var(--border);background:var(--surface);color:var(--text);cursor:pointer;}
+.aml-yn button.on-oui{background:var(--danger);border-color:var(--danger);color:#fff;}
+.aml-yn button.on-non{background:var(--success);border-color:var(--success);color:#fff;}
+
+.preco-item{border:1.5px solid var(--border);border-radius:6px;padding:14px 16px;margin-bottom:10px;}
+.preco-item.on{border-color:var(--navy);background:var(--blue-soft);}
+.preco-head{display:flex;align-items:center;gap:10px;cursor:pointer;}
+.preco-head input{width:16px;height:16px;}
+.preco-head span{font-weight:700;font-size:13.5px;}
+.preco-item textarea{margin-top:10px;}
+
+.backlink{background:none;border:none;color:var(--text-muted);font-size:13px;font-weight:600;cursor:pointer;padding:0;margin-bottom:16px;display:inline-flex;align-items:center;gap:5px;}
+.backlink:hover{color:var(--heading);}
+.err-box{background:var(--danger-soft);border:1px solid var(--danger);color:var(--danger);border-radius:6px;padding:10px 12px;font-size:12.5px;margin-top:12px;}
+</style>
+</head>
+<body>
+
+<div id="topbar"></div>
+<div class="wrap" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="../lib/pdf-fill.js"></script>
+<script src="../client/config.js"></script>
+<script>
+(function(){
+"use strict";
+
+var AML_ROWS = [
+  {key:"ppeBeneficiaires", label:"Des Personnes Politiquement Exposées ont été identifiées parmi les bénéficiaires effectifs"},
+  {key:"listesSanctions", label:"Des personnes présentes sur liste des terroristes ou de gel des avoirs ont été identifiées"},
+  {key:"refusPieces", label:"Refus ou impossibilité de produire des pièces justificatives sur la provenance des fonds"},
+  {key:"diligencesImpossibles", label:"Les diligences usuelles ne permettent pas d'identifier le bénéficiaire effectif"},
+  {key:"rapatriementEtranger", label:"Rapatriement de fonds d'un pays imposant des obligations LCB/FT non équivalentes"},
+  {key:"relationDistance", label:"Le client veut entrer en relation à distance"},
+  {key:"paysRisque", label:"Le ou les bénéficiaires effectifs résident dans un pays à risque"},
+  {key:"changementsStatutaires", label:"Changements statutaires fréquents non justifiés par la situation économique"},
+  {key:"interpositionPersonnes", label:"Interposition de personnes physiques n'intervenant qu'en apparence"},
+  {key:"transactionSousEvaluee", label:"Transaction immobilière à un prix manifestement sous-évalué"},
+  {key:"comportementAtypique", label:"Comportement atypique du client (urgence à investir, etc.)"},
+  {key:"societesEcran1", label:"Utilisation de sociétés écran (siège dans un État non coopératif)"},
+  {key:"operationsIncoherentes", label:"Opérations financières incohérentes / secteurs sensibles à la fraude TVA"},
+  {key:"societesEcran2", label:"Utilisation de sociétés écran (domiciliataire / adresse privée)"},
+];
+
+var PROFILES = [
+  {key:"prudent", name:"Prudent", txt:"Rendements modérés et réguliers (en moyenne 3%). Peu de risque de perte en capital (en moyenne -6%). Horizon minimum 5 ans."},
+  {key:"equilibre", name:"Équilibré", txt:"Valorisation du capital, rendements moyens (en moyenne 5%). Risque modéré de perte en capital (en moyenne -10%). Horizon minimum 5 ans."},
+  {key:"dynamique", name:"Dynamique", txt:"Valorisation active, rendements élevés (en moyenne 15%). Risque important de perte en capital (en moyenne -30%). Horizon minimum 7 ans."},
+  {key:"discretionnaire", name:"Discrétionnaire", txt:"Fluctuations élevées et risques forts de moins-value, allocation laissée à la discrétion d'IVO. Horizon minimum 8 ans."},
+];
+
+var PRECONISATIONS_META = [
+  {key:"conseilInvestissement", label:"Conseil en investissement et test d'adéquation"},
+  {key:"gestionMandat", label:"Gestion sous mandat et test d'adéquation"},
+  {key:"rto", label:"Mandat de réception-transmission d'ordres conseillé et test du caractère approprié ou mise en garde"},
+  {key:"assuranceVie", label:"Contrat d'assurance vie et devoir de conseil ou mise en garde"},
+];
+
+var RECON_META = [
+  {key:"conseils", label:"Tous les conseils et explications sur les services et produits proposés"},
+  {key:"documentInfo", label:"Un document d'information présentant la société IVO Capital Partners"},
+  {key:"infosPrecontractuelles", label:"Les informations précontractuelles"},
+  {key:"courrierCategorisation", label:"Un courrier de catégorisation"},
+];
+
+function esc(s){ return (s||"").toString().replace(/[&<>"']/g, function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c];}); }
+function n(v){ var f = parseFloat(v); return isNaN(f) ? 0 : f; }
+function fmt(v){ if(v===""||v===null||v===undefined) return "—"; return n(v).toLocaleString('fr-FR'); }
+function yn(v){ return v===true?"Oui":v===false?"Non":"—"; }
+function fmtDateTime(iso){ try{ return new Date(iso).toLocaleString('fr-FR'); }catch(e){ return iso; } }
+
+function defaultAdvisorAnswers(){
+  var aml = {};
+  AML_ROWS.forEach(function(r){ aml[r.key] = null; });
+  var preconisations = {};
+  PRECONISATIONS_META.forEach(function(p){ preconisations[p.key] = {checked:false, note:""}; });
+  var reconnaissance = {};
+  RECON_META.forEach(function(r){ reconnaissance[r.key] = false; });
+  return { aml: aml, profil: null, preconisations: preconisations, reconnaissance: reconnaissance, lieu:"", date:"" };
+}
+
+function suggestProfile(risque){
+  if(!risque || !risque.perte || !risque.reaction || !risque.rendement) return null;
+  var s1 = {p1:1,p2:2,p3:3,p4:4}[risque.perte] || 0;
+  var s2 = {vendre:1,conserver:2.5,investir:4}[risque.reaction] || 0;
+  var s3 = {r1:1,r2:2.5,r3:4}[risque.rendement] || 0;
+  var avg = (s1+s2+s3)/3;
+  if(avg<=1.6) return "prudent";
+  if(avg<=2.6) return "equilibre";
+  if(avg<=3.5) return "dynamique";
+  return "discretionnaire";
+}
+
+var supa = null;
+function getClient(){
+  if(supa) return supa;
+  var cfg = window.IVO_CONFIG;
+  if(!cfg || !cfg.SUPABASE_URL || cfg.SUPABASE_URL.indexOf("your-project-ref")>-1){
+    throw new Error("config.js (dans /client) n'est pas encore renseigné avec vos identifiants Supabase.");
+  }
+  supa = window.supabase.createClient(cfg.SUPABASE_URL, cfg.SUPABASE_ANON_KEY);
+  return supa;
+}
+
+var appState = {
+  view: "loading", // loading | login | dashboard | detail
+  session: null,
+  submissions: [],
+  current: null,
+  advisorAnswers: null,
+  loading: false,
+  loginError: "",
+  listError: "",
+};
+
+function showToast(msg){
+  var t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  setTimeout(function(){ t.classList.remove("show"); }, 2400);
+}
+
+function render(){
+  document.getElementById("topbar").innerHTML = renderTopbar();
+  var app = document.getElementById("app");
+  if(appState.view==="loading") app.innerHTML = '<div class="card"><p class="step-intro" style="margin:0">Chargement…</p></div>';
+  else if(appState.view==="login") app.innerHTML = renderLogin();
+  else if(appState.view==="dashboard") app.innerHTML = renderDashboard();
+  else if(appState.view==="detail") app.innerHTML = renderDetail();
+  bindEvents();
+}
+
+function renderTopbar(){
+  var userBit = appState.session ? (
+    '<div class="topbar-user"><span>'+esc(appState.session.user.email)+'</span><button data-action="logout">Déconnexion</button></div>'
+  ) : "";
+  return '<div class="topbar-inner">' +
+    '<div class="brand-badge"><span>IVO</span></div>' +
+    '<div><div class="brand-name">IVO Capital Partners</div><div class="brand-sub">Interface conseiller</div></div>' +
+    userBit +
+  '</div>';
+}
+
+function renderLogin(){
+  return '<div class="card">' +
+    '<div class="eyebrow">Accès réservé</div>' +
+    '<h1 class="step-title">Interface conseiller</h1>' +
+    '<p class="step-intro">Connectez-vous avec votre compte IVO Capital Partners.</p>' +
+    '<div class="login-field"><label class="flabel">Email</label><input type="email" id="loginEmail" autocomplete="username"></div>' +
+    '<div class="login-field"><label class="flabel">Mot de passe</label><input type="password" id="loginPassword" autocomplete="current-password"></div>' +
+    '<button class="btn btn-primary" style="width:100%" data-action="login">Se connecter</button>' +
+    (appState.loginError ? '<div class="err-box">'+esc(appState.loginError)+'</div>' : '') +
+  '</div>';
+}
+
+function statusBadge(status){
+  if(status==="complete") return '<span class="badge badge-complete">Complété</span>';
+  if(status==="recu") return '<span class="badge badge-recu">Reçu</span>';
+  return '<span class="badge badge-encours">En cours</span>';
+}
+
+function renderDashboard(){
+  var html = '<div class="subrow"><div><h1 class="step-title" style="margin-bottom:2px">Dossiers reçus</h1>' +
+    '<p class="step-intro" style="margin:0">'+appState.submissions.length+' dossier(s)</p></div>' +
+    '<button class="btn btn-ghost" data-action="refresh">↻ Actualiser</button></div>';
+
+  if(appState.listError){
+    html += '<div class="err-box">'+esc(appState.listError)+'</div>';
+  }
+
+  if(!appState.submissions.length && !appState.listError){
+    html += '<div class="card"><div class="empty-state">Aucun dossier reçu pour le moment.<br>Les questionnaires complétés par vos clients apparaîtront ici automatiquement.</div></div>';
+  } else if(appState.submissions.length) {
+    html += '<div class="card wide"><div class="sublist">';
+    appState.submissions.forEach(function(s){
+      html += '<div class="subitem" data-action="open" data-id="'+esc(s.id)+'">' +
+        '<div><div class="subitem-name">'+esc(s.client_name||"(sans nom)")+'</div>' +
+        '<div class="subitem-meta">'+esc(s.client_email||"")+' · '+fmtDateTime(s.created_at)+' · conseiller : '+esc(s.advisor_email)+'</div></div>' +
+        statusBadge(s.status) +
+      '</div>';
+    });
+    html += '</div></div>';
+  }
+  return html;
+}
+
+function renderDetail(){
+  var sub = appState.current;
+  var a = sub.answers;
+  var aa = appState.advisorAnswers;
+  var isMorale = a.personType==="morale";
+
+  var html = '<button class="backlink" data-action="backToDashboard">← Retour aux dossiers</button>';
+  html += '<div class="card wide">';
+  html += '<div class="eyebrow">Dossier client</div>';
+  html += '<h1 class="step-title" style="margin-bottom:4px">'+esc(sub.client_name||"(sans nom)")+'</h1>';
+  html += '<p class="step-intro">'+esc(sub.client_email||"")+' · reçu le '+fmtDateTime(sub.created_at)+' · '+statusBadge(sub.status)+'</p>';
+
+  html += '<div class="section-title">Récapitulatif des réponses du client</div>';
+  html += readonlyGrid(clientSummaryRows(a, isMorale));
+
+  html += '<div class="section-title">Critères de vigilance renforcée (LCB-FT)</div>';
+  html += '<p class="section-sub">À votre appréciation, sur la base de l\'entretien avec le client.</p>';
+  AML_ROWS.forEach(function(row){
+    var v = aa.aml[row.key];
+    html += '<div class="aml-row"><div class="aml-label">'+esc(row.label)+'</div>' +
+      '<div class="aml-yn">' +
+        '<button class="'+(v===true?"on-oui":"")+'" data-action="amlSet" data-key="'+row.key+'" data-value="true">Oui</button>' +
+        '<button class="'+(v===false?"on-non":"")+'" data-action="amlSet" data-key="'+row.key+'" data-value="false">Non</button>' +
+      '</div></div>';
+  });
+
+  html += '<div class="section-title">Profil de risque retenu par IVO</div>';
+  var suggestion = suggestProfile(a.risque);
+  if(suggestion && !aa.profil){
+    html += '<p class="section-sub">Profil indicatif calculé à partir des réponses client : <b>'+PROFILES.filter(function(p){return p.key===suggestion;})[0].name+'</b>. À confirmer ci-dessous.</p>';
+  }
+  PROFILES.forEach(function(p){
+    html += '<div class="optcard'+(aa.profil===p.key?" on":"")+'" data-action="set" data-path="profil" data-value="'+p.key+'">' +
+      '<div class="ot">'+p.name+'</div><div class="od">'+p.txt+'</div></div>';
+  });
+
+  html += '<div class="section-title">Nos préconisations</div>';
+  PRECONISATIONS_META.forEach(function(p){
+    var item = aa.preconisations[p.key];
+    html += '<div class="preco-item'+(item.checked?" on":"")+'">' +
+      '<label class="preco-head"><input type="checkbox" data-action="precoCheck" data-key="'+p.key+'" '+(item.checked?"checked":"")+'><span>'+esc(p.label)+'</span></label>' +
+      (item.checked ? '<textarea placeholder="Précisions / justification (optionnel)" data-action="precoNote" data-key="'+p.key+'">'+esc(item.note)+'</textarea>' : '') +
+    '</div>';
+  });
+
+  html += '<div class="section-title">Le client reconnaît avoir reçu</div>';
+  RECON_META.forEach(function(r){
+    html += '<div class="checkline"><input type="checkbox" id="recon-'+r.key+'" data-action="reconCheck" data-key="'+r.key+'" '+(aa.reconnaissance[r.key]?"checked":"")+'>' +
+      '<label for="recon-'+r.key+'">'+esc(r.label)+'</label></div>';
+  });
+
+  html += '<div class="field-row" style="margin-top:20px">' +
+    '<div class="field"><label class="flabel">Lieu de signature</label><input type="text" data-action="setText" data-key="lieu" value="'+esc(aa.lieu)+'"></div>' +
+    '<div class="field"><label class="flabel">Date de signature</label><input type="date" data-action="setText" data-key="date" value="'+esc(aa.date)+'"></div>' +
+  '</div>';
+
+  html += '<div class="finalbox">' +
+    '<div class="finalbox-title">'+(sub.status==="complete"?"Dossier complété":"Finaliser le dossier")+'</div>' +
+    '<p class="finalbox-text">Génère le PDF officiel complet (partie client + partie IVO) et le dépose dans le dossier.</p>' +
+    '<button class="btn btn-primary btn-large" data-action="generateFinal">📄 '+(sub.status==="complete"?"Régénérer le PDF final":"Générer le PDF final")+'</button>' +
+    '<div id="detailError"></div>' +
+  '</div>';
+
+  html += '</div>';
+  return html;
+}
+
+function readonlyGrid(rows){
+  var html = '<div class="readonly-grid">';
+  rows.forEach(function(r){
+    html += '<div class="k">'+esc(r[0])+'</div><div class="v">'+(r[1]||"—")+'</div>';
+  });
+  html += '</div>';
+  return html;
+}
+
+function clientSummaryRows(a, isMorale){
+  var rows = [];
+  if(!isMorale){
+    rows.push(["Nom complet", esc((a.prenom||"")+" "+(a.nom||""))]);
+    rows.push(["Date de naissance", esc(a.dateNaissance)]);
+    rows.push(["Situation de famille", esc(a.situationFamille)]);
+    rows.push(["Profession", esc(a.profession)]);
+  } else {
+    rows.push(["Société", esc(a.morale && a.morale.denomination)]);
+    rows.push(["Forme juridique", esc(a.morale && a.morale.formeJuridique)]);
+  }
+  rows.push(["Email", esc(a.contact && a.contact.email)]);
+  rows.push(["Téléphone", esc(a.contact && a.contact.telephone)]);
+  rows.push(["PPE (vous)", yn(a.ppe && a.ppe.vous)]);
+  rows.push(["PPE (entourage)", yn(a.ppe && a.ppe.famille)]);
+  rows.push(["Montant envisagé", a.fonds && a.fonds.montant ? fmt(a.fonds.montant)+" €" : "—"]);
+  var pTotal = 0;
+  var src = isMorale ? a.pm : a.pp;
+  if(src){ for(var k in src){ pTotal += n(src[k]); } }
+  rows.push(["Patrimoine total estimé", pTotal ? fmt(pTotal)+" K€" : "—"]);
+  rows.push(["Gère seul son portefeuille", yn(a.gereSeul)]);
+  rows.push(["Expérience professionnelle finance", yn(a.experiencePro)]);
+  var hMap = {court:"Court terme",moyen:"Moyen terme",long:"Long terme",tlong:"Très long terme"};
+  rows.push(["Horizon d'investissement", a.horizon ? hMap[a.horizon] : "—"]);
+  var perteMap={p1:"Jusqu'à 10 000€",p2:"Jusqu'à 20 000€",p3:"Jusqu'à 30 000€",p4:"Plus de 30 000€"};
+  rows.push(["Perte acceptée sur 100 000€", a.risque && a.risque.perte ? perteMap[a.risque.perte] : "—"]);
+  var incMap={oui:"Oui",non:"Non",nonExprime:"Ne s'est pas exprimé"};
+  rows.push(["Préférences ESG", a.esg && a.esg.inclure ? incMap[a.esg.inclure] : "—"]);
+  return rows;
+}
+
+/* ---------- actions ---------- */
+async function init(){
+  try{
+    var client = getClient();
+    var { data } = await client.auth.getSession();
+    appState.session = data.session;
+    appState.view = data.session ? "dashboard" : "login";
+    render();
+    if(data.session) loadSubmissions();
+    client.auth.onAuthStateChange(function(event, session){
+      appState.session = session;
+      if(!session){ appState.view = "login"; render(); }
+    });
+  }catch(err){
+    appState.view = "login";
+    appState.loginError = err.message;
+    render();
+  }
+}
+
+async function loadSubmissions(){
+  appState.listError = "";
+  try{
+    var client = getClient();
+    var { data, error } = await client.from("submissions").select("*").order("created_at",{ascending:false});
+    if(error) throw new Error(error.message);
+    appState.submissions = data || [];
+  }catch(err){
+    appState.listError = "Impossible de charger les dossiers : " + err.message;
+  }
+  render();
+}
+
+async function openSubmission(id){
+  var sub = appState.submissions.filter(function(s){ return s.id===id; })[0];
+  if(!sub) return;
+  appState.current = sub;
+  appState.advisorAnswers = sub.advisor_answers ? JSON.parse(JSON.stringify(sub.advisor_answers)) : defaultAdvisorAnswers();
+  var suggestion = suggestProfile(sub.answers.risque);
+  if(suggestion && !appState.advisorAnswers.profil) appState.advisorAnswers.profil = suggestion;
+  appState.view = "detail";
+  render();
+}
+
+function bindEvents(){
+  var app = document.getElementById("app");
+  var topbar = document.getElementById("topbar");
+
+  [app, topbar].forEach(function(root){
+    root.querySelectorAll("[data-action]").forEach(function(el){
+      var evt = (el.tagName==="TEXTAREA" || (el.tagName==="INPUT" && el.type!=="checkbox")) ? "input" : "click";
+      el.addEventListener(evt, function(e){
+        var action = el.getAttribute("data-action");
+
+        if(action==="login"){
+          e.preventDefault();
+          doLogin();
+          return;
+        }
+        if(action==="logout"){
+          getClient().auth.signOut();
+          appState.view="login"; appState.submissions=[]; render();
+          return;
+        }
+        if(action==="refresh"){ loadSubmissions(); return; }
+        if(action==="open"){ openSubmission(el.getAttribute("data-id")); return; }
+        if(action==="backToDashboard"){ appState.view="dashboard"; appState.current=null; render(); return; }
+
+        if(action==="amlSet"){
+          var key = el.getAttribute("data-key");
+          appState.advisorAnswers.aml[key] = el.getAttribute("data-value")==="true";
+          render();
+          return;
+        }
+        if(action==="set"){
+          appState.advisorAnswers[el.getAttribute("data-path")] = el.getAttribute("data-value");
+          render();
+          return;
+        }
+        if(action==="precoCheck"){
+          var k = el.getAttribute("data-key");
+          appState.advisorAnswers.preconisations[k].checked = el.checked;
+          render();
+          return;
+        }
+        if(action==="precoNote"){
+          var k2 = el.getAttribute("data-key");
+          appState.advisorAnswers.preconisations[k2].note = el.value;
+          return; // no re-render needed, avoid losing focus while typing
+        }
+        if(action==="reconCheck"){
+          appState.advisorAnswers.reconnaissance[el.getAttribute("data-key")] = el.checked;
+          return;
+        }
+        if(action==="setText"){
+          appState.advisorAnswers[el.getAttribute("data-key")] = el.value;
+          return;
+        }
+        if(action==="generateFinal"){
+          generateFinalPdf(el);
+          return;
+        }
+      });
+    });
+  });
+}
+
+async function doLogin(){
+  appState.loginError = "";
+  var email = document.getElementById("loginEmail").value.trim();
+  var password = document.getElementById("loginPassword").value;
+  if(!email || !password){ appState.loginError = "Email et mot de passe requis."; render(); return; }
+  try{
+    var client = getClient();
+    var { data, error } = await client.auth.signInWithPassword({ email: email, password: password });
+    if(error) throw new Error(error.message);
+    appState.session = data.session;
+    appState.view = "dashboard";
+    render();
+    loadSubmissions();
+  }catch(err){
+    appState.loginError = err.message;
+    render();
+  }
+}
+
+async function generateFinalPdf(btn){
+  var errBox = document.getElementById("detailError");
+  if(errBox) errBox.innerHTML = "";
+  var original = btn.textContent;
+  btn.disabled = true; btn.textContent = "Génération en cours…";
+  try{
+    var sub = appState.current;
+    var bytes = await IvoPdfFill.fillAnnexe4(sub.answers, appState.advisorAnswers);
+    var client = getClient();
+    var path = sub.id + "-final.pdf";
+    var upload = await client.storage.from("submissions").upload(path, new Blob([bytes],{type:"application/pdf"}), {contentType:"application/pdf", upsert:true});
+    if(upload.error) throw new Error(upload.error.message);
+    var update = await client.from("submissions").update({
+      advisor_answers: appState.advisorAnswers,
+      pdf_final_path: path,
+      status: "complete",
+      updated_at: new Date().toISOString(),
+    }).eq("id", sub.id);
+    if(update.error) throw new Error(update.error.message);
+
+    var blobUrl = URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
+    var a = document.createElement("a");
+    a.href = blobUrl; a.download = "IVO-dossier-complet-"+(sub.client_name||"client").replace(/[^a-zA-Z0-9-]+/g,"_")+".pdf";
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(function(){ URL.revokeObjectURL(blobUrl); }, 4000);
+
+    sub.status = "complete";
+    showToast("Dossier finalisé et PDF téléchargé ✓");
+    render();
+  }catch(err){
+    console.error(err);
+    if(errBox) errBox.innerHTML = '<div class="err-box">'+esc(err.message)+'</div>';
+  }finally{
+    btn.disabled = false; btn.textContent = original;
+  }
+}
+
+init();
+})();
+</script>
+</body>
+</html>

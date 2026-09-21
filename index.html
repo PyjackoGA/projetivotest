@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>IVO Capital Partners — Connaissance client</title>
+<link rel="stylesheet" href="lib/ivo-theme.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Libre+Franklin:wght@600;700;800&display=swap">
+<style>
+.landing{max-width:480px;margin:70px auto;text-align:center;}
+.landing-links{display:flex;flex-direction:column;gap:12px;margin-top:24px;}
+.landing-link{
+  display:block;text-decoration:none;border:1.5px solid var(--border);border-radius:8px;
+  padding:18px 20px;background:var(--surface);transition:border-color .12s ease;
+}
+.landing-link:hover{border-color:var(--navy);}
+.landing-link .lt{font-weight:700;font-size:15px;color:var(--heading);margin-bottom:3px;}
+.landing-link .ld{font-size:12.5px;color:var(--text-muted);}
+</style>
+</head>
+<body>
+<div id="topbar-placeholder"></div>
+<div class="wrap">
+  <div class="card landing">
+    <div class="eyebrow">IVO Capital Partners</div>
+    <h1 class="step-title">Connaissance client</h1>
+    <p class="step-intro">Choisissez votre espace.</p>
+    <div class="landing-links">
+      <a class="landing-link" href="client/index.html">
+        <div class="lt">Remplir le questionnaire</div>
+        <div class="ld">Espace client</div>
+      </a>
+      <a class="landing-link" href="conseiller/index.html">
+        <div class="lt">Espace conseiller</div>
+        <div class="ld">Connexion requise</div>
+      </a>
+    </div>
+  </div>
+</div>
+<script>
+document.getElementById("topbar-placeholder").outerHTML =
+  '<div id="topbar"><div class="topbar-inner">' +
+  '<div class="brand-badge"><span>IVO</span></div>' +
+  '<div><div class="brand-name">IVO Capital Partners</div><div class="brand-sub">Connaissance client</div></div>' +
+  '</div></div>';
+</script>
+</body>
+</html>

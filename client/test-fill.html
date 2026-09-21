@@ -1,0 +1,81 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Test fill</title>
+<style>body{margin:0;background:#888;} canvas{display:block;margin:10px auto;box-shadow:0 0 6px rgba(0,0,0,.5);}</style>
+</head>
+<body>
+<div id="status" style="position:fixed;top:0;left:0;background:#fff;padding:4px 8px;z-index:9;font-family:monospace;font-size:12px;"></div>
+<div id="out"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="../lib/pdf-fill.js"></script>
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+var sampleState = {
+  personType: "physique",
+  nom: "Dupont", prenom: "Marie", dateNaissance: "1975-04-12",
+  adresse: "12 rue des Lilas, 75012 Paris", profession: "Architecte",
+  situationFamille: "Marié(e)", regimeMatrimonial: "Séparation de biens",
+  nbEnfants: "2",
+  renseignerConjoint: true, conjoint: {nom:"Dupont", prenom:"Jean", dateNaissance:"1973-01-09"},
+  morale: {denomination:"", formeJuridique:"", adresse:"", pays:"", rcs:"", activite:"", regimeFiscal:"IS",
+    repNom:"", repPrenom:"", repFonction:"", repTel:"", repEmail:""},
+  contact: {email:"marie.dupont@example.com", telephone:"0612345678"},
+  ppe: {vous:false, vousFonction:"", vousPays:"", conjointPPE:false, conjointFonction:"", conjointPays:"",
+    famille:false, familleFonction:"", famillePays:""},
+  beneficiaires:"", controle:"",
+  fonds: {montant:"250000", origine:"france", origineDetail:"", natures:["vente_epargne","epargne","heritage"], autreNature:""},
+  pp: {residencePrincipale:"650", residenceSecondaire:"", immobilierInvest:"120", autresImmo:"",
+    assuranceVie:"180", comptesTitres:"95", epargneLogement:"20", epargneSalariale:"", autresFinanciers:"",
+    actifsPro:"", liquidites:"40",
+    revenusPro:"95", revenusLocatifs:"12", revenusVM:"3", revenusAutres:"",
+    chargesEmprunt:"18", chargesPension:"", chargesCourantes:"32", chargesAutres:"",
+    impotRevenu:"22", impotLocatif:"3", impotVM:"1"},
+  pm: {locauxPro:"",immobilierInvest:"",autresImmo:"",comptesTitres:"",autresFinanciers:"",autresActifs:"",tresorerie:"",
+    produitsExploitation:"",produitsFinanciers:"",produitsExceptionnels:"",chargesExploitation:"",chargesFinancieres:"",chargesExceptionnelles:"",impot:""},
+  instruments: {
+    actions:{connait:true, ops:"5"}, obligations:{connait:true, ops:"1"}, monetaire:{connait:false, ops:"aucune"},
+    opcvm:{connait:true, ops:"5"}, etf:{connait:true, ops:"1"}, warrants:{connait:false, ops:"aucune"},
+    defiscalisation:{connait:false, ops:"aucune"}, nonCotees:{connait:false, ops:"aucune"}, contratsFinanciers:{connait:false, ops:"aucune"}
+  },
+  gereSeul:true, gereSeulDepuis:"8 ans", mandatGestion:false, experiencePro:false, gains:true, pertes:true, conscienceRisque:true,
+  objOrder: ["performance","valoriser","diversifier","fiscalite","succession","completer","securite"],
+  objOrderMorale: ["valoriser","tresorerie","diversifier","revenus","fiscalite","investissements","garantie"],
+  horizon:"long",
+  projetsCourtTerme: "Aucun projet particulier à court terme.",
+  esg: {inclure:"oui", thematique:"environnementale", sfdr:"revoir", impact:"oui"},
+  risque: {perte:"p3", reaction:"conserver", rendement:"r2"}
+};
+// fix a nature key typo to match actual expected keys
+sampleState.fonds.natures = ["vm","epargne","heritage"];
+
+(async function(){
+  try{
+    var bytes = await IvoPdfFill.fillAnnexe4(sampleState);
+    document.getElementById('status').textContent = 'filled OK, bytes=' + bytes.length;
+    window.__pdfBytes = bytes;
+    var pdf = await pdfjsLib.getDocument({data: bytes}).promise;
+    window.__pdf = pdf;
+    var out = document.getElementById('out');
+    var params = new URLSearchParams(location.search);
+    var only = params.get('page');
+    var pagesToRender = only ? [parseInt(only,10)] : Array.from({length: pdf.numPages}, function(_,i){return i+1;});
+    for(var i=0;i<pagesToRender.length;i++){
+      var p = pagesToRender[i];
+      var page = await pdf.getPage(p);
+      var scaleParam = parseFloat(params.get('scale'));
+      var viewport = page.getViewport({scale: scaleParam || (only ? 2.0 : 1.4)});
+      var canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      canvas.dataset.page = p;
+      out.appendChild(canvas);
+      await page.render({canvasContext: canvas.getContext('2d'), viewport: viewport}).promise;
+    }
+    window.__filled = true;
+  }catch(e){
+    document.getElementById('status').textContent = 'ERROR: ' + e.message;
+    console.error(e);
+  }
+})();
+</script>
+</body></html>
