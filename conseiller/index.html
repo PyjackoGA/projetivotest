@@ -28,6 +28,12 @@
 .badge-encours{background:var(--surface-2);color:var(--text-muted);border:1px solid var(--border);}
 .empty-state{text-align:center;padding:50px 20px;color:var(--text-muted);font-size:13.5px;}
 
+.dropzone{border:1.5px dashed var(--border);background:var(--surface-2);transition:border-color .15s ease,background .15s ease;}
+.dropzone.drag-over{border-color:var(--navy);background:var(--blue-soft);}
+.import-row{display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;}
+.import-title{font-weight:700;font-size:13.5px;margin-bottom:3px;}
+.import-sub{font-size:12px;color:var(--text-muted);line-height:1.5;max-width:520px;}
+
 .section-title{font-size:15px;font-weight:800;color:var(--heading);margin:30px 0 4px;padding-top:22px;border-top:1px solid var(--border);}
 .section-title:first-child{margin-top:0;padding-top:0;border-top:none;}
 .section-sub{font-size:12.5px;color:var(--text-muted);margin:0 0 16px;}
@@ -209,6 +215,17 @@ function renderDashboard(){
     '<p class="step-intro" style="margin:0">'+appState.submissions.length+' dossier(s)</p></div>' +
     '<button class="btn btn-ghost" data-action="refresh">↻ Actualiser</button></div>';
 
+  html += '<div class="card wide dropzone" id="importDropzone">' +
+    '<div class="import-row">' +
+      '<div><div class="import-title">📎 Importer un PDF reçu manuellement</div>' +
+      '<div class="import-sub">Envoi automatique en échec, ou dossier traité autrement : glissez ici le PDF généré par cet outil (le vôtre ou celui d\'un client), ou cliquez pour le choisir.</div></div>' +
+      '<label class="btn btn-ghost" style="cursor:pointer;flex-shrink:0">Choisir un fichier' +
+        '<input type="file" accept="application/pdf" id="importPdfInput" data-action="importPdf" style="display:none">' +
+      '</label>' +
+    '</div>' +
+    '<div id="importError"></div>' +
+  '</div>';
+
   if(appState.listError){
     html += '<div class="err-box">'+esc(appState.listError)+'</div>';
   }
@@ -240,6 +257,9 @@ function renderDetail(){
   html += '<div class="eyebrow">Dossier client</div>';
   html += '<h1 class="step-title" style="margin-bottom:4px">'+esc(sub.client_name||"(sans nom)")+'</h1>';
   html += '<p class="step-intro">'+esc(sub.client_email||"")+' · reçu le '+fmtDateTime(sub.created_at)+' · '+statusBadge(sub.status)+'</p>';
+  if(sub.isLocal){
+    html += '<div class="info"><span class="ic">📎</span><div>Dossier importé localement depuis <b>'+esc(sub._sourceFile)+'</b> — il n\'est pas (encore) enregistré dans Supabase. "Générer le PDF final" le téléchargera directement sans le synchroniser au tableau de bord.</div></div>';
+  }
 
   html += '<div class="section-title">Récapitulatif des réponses du client</div>';
   html += readonlyGrid(clientSummaryRows(a, isMorale));
@@ -438,9 +458,72 @@ function bindEvents(){
           generateFinalPdf(el);
           return;
         }
+        if(action==="importPdf"){
+          if(el.files && el.files[0]) handleImportFile(el.files[0]);
+          return;
+        }
       });
     });
   });
+
+  var dz = document.getElementById("importDropzone");
+  if(dz){
+    ["dragenter","dragover"].forEach(function(evt){
+      dz.addEventListener(evt, function(e){ e.preventDefault(); dz.classList.add("drag-over"); });
+    });
+    ["dragleave","drop"].forEach(function(evt){
+      dz.addEventListener(evt, function(e){ e.preventDefault(); dz.classList.remove("drag-over"); });
+    });
+    dz.addEventListener("drop", function(e){
+      var file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if(file) handleImportFile(file);
+    });
+  }
+}
+
+async function handleImportFile(file){
+  var errBox = document.getElementById("importError");
+  if(errBox) errBox.innerHTML = "";
+  if(file.type && file.type!=="application/pdf" && !file.name.toLowerCase().endsWith(".pdf")){
+    if(errBox) errBox.innerHTML = '<div class="err-box">Ce fichier n\'est pas un PDF.</div>';
+    return;
+  }
+  try{
+    var buf = await file.arrayBuffer();
+    var parsed = await IvoPdfFill.extractEmbeddedData(new Uint8Array(buf));
+    if(!parsed){
+      if(errBox) errBox.innerHTML = '<div class="err-box">Ce PDF ne contient pas de données IVO KYC exploitables — vérifiez qu\'il vient bien de cet outil (bouton "Télécharger mon PDF" côté client, ou "Générer le PDF final" côté conseiller).</div>';
+      return;
+    }
+    openLocalSubmission(parsed, file.name);
+  }catch(err){
+    console.error(err);
+    if(errBox) errBox.innerHTML = '<div class="err-box">Impossible de lire ce fichier : '+esc(err.message)+'</div>';
+  }
+}
+
+function openLocalSubmission(parsed, fileName){
+  var a = parsed.clientAnswers;
+  var isMorale = a.personType==="morale";
+  var clientName = isMorale ? (a.morale && a.morale.denomination) : ((a.prenom||"")+" "+(a.nom||"")).trim();
+  appState.current = {
+    id: "local-"+Date.now(),
+    isLocal: true,
+    client_name: clientName,
+    client_email: a.contact && a.contact.email,
+    advisor_email: (window.IVO_CONFIG && window.IVO_CONFIG.ADVISORS && window.IVO_CONFIG.ADVISORS[0] && window.IVO_CONFIG.ADVISORS[0].email) || "",
+    status: parsed.advisorAnswers ? "complete" : "recu",
+    created_at: new Date().toISOString(),
+    answers: a,
+    advisor_answers: parsed.advisorAnswers || null,
+    _sourceFile: fileName,
+  };
+  appState.advisorAnswers = parsed.advisorAnswers ? JSON.parse(JSON.stringify(parsed.advisorAnswers)) : defaultAdvisorAnswers();
+  var suggestion = suggestProfile(a.risque);
+  if(suggestion && !appState.advisorAnswers.profil) appState.advisorAnswers.profil = suggestion;
+  appState.view = "detail";
+  render();
+  showToast("Dossier importé depuis "+fileName);
 }
 
 async function doLogin(){
@@ -470,17 +553,20 @@ async function generateFinalPdf(btn){
   try{
     var sub = appState.current;
     var bytes = await IvoPdfFill.fillAnnexe4(sub.answers, appState.advisorAnswers);
-    var client = getClient();
-    var path = sub.id + "-final.pdf";
-    var upload = await client.storage.from("submissions").upload(path, new Blob([bytes],{type:"application/pdf"}), {contentType:"application/pdf", upsert:true});
-    if(upload.error) throw new Error(upload.error.message);
-    var update = await client.from("submissions").update({
-      advisor_answers: appState.advisorAnswers,
-      pdf_final_path: path,
-      status: "complete",
-      updated_at: new Date().toISOString(),
-    }).eq("id", sub.id);
-    if(update.error) throw new Error(update.error.message);
+
+    if(!sub.isLocal){
+      var client = getClient();
+      var path = sub.id + "-final.pdf";
+      var upload = await client.storage.from("submissions").upload(path, new Blob([bytes],{type:"application/pdf"}), {contentType:"application/pdf", upsert:true});
+      if(upload.error) throw new Error(upload.error.message);
+      var update = await client.from("submissions").update({
+        advisor_answers: appState.advisorAnswers,
+        pdf_final_path: path,
+        status: "complete",
+        updated_at: new Date().toISOString(),
+      }).eq("id", sub.id);
+      if(update.error) throw new Error(update.error.message);
+    }
 
     var blobUrl = URL.createObjectURL(new Blob([bytes],{type:"application/pdf"}));
     var a = document.createElement("a");
