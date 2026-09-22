@@ -622,16 +622,19 @@ function stepObjectifs(){
   var orderKey = isPM ? "objOrderMorale" : "objOrder";
 
   var html = '<div class="eyebrow">Étape 5 / 7</div><h2 class="step-title">Vos objectifs et votre horizon</h2>' +
-    '<p class="step-intro">Classez ces objectifs du plus important (en haut) au moins important pour vous, à l\'aide des flèches.</p>' +
+    '<p class="step-intro">Classez ces objectifs du plus important (en haut) au moins important pour vous — glissez-les avec <span class="rankhandle-inline">⠿</span>, ou utilisez les flèches.</p>' +
     '<div class="ranklist">';
 
   order.forEach(function(key, idx){
-    html += '<div class="rankitem"><div class="ranknum">'+(idx+1)+'</div><div class="ranktext">'+labels[key]+'</div>' +
+    html += '<div class="rankitem">' +
+      '<div class="rankhandle" data-orderkey="'+orderKey+'" data-idx="'+idx+'">⠿</div>' +
+      '<div class="ranknum">'+(idx+1)+'</div><div class="ranktext">'+labels[key]+'</div>' +
       '<div class="rankbtns">' +
       '<button data-action="rankup" data-orderkey="'+orderKey+'" data-idx="'+idx+'" '+(idx===0?"disabled":"")+'>↑</button>' +
       '<button data-action="rankdown" data-orderkey="'+orderKey+'" data-idx="'+idx+'" '+(idx===order.length-1?"disabled":"")+'>↓</button>' +
       '</div></div>';
   });
+  html += '</div>';
   html += '</div>';
 
   html += '<div class="field" style="margin-top:24px"><label class="flabel">Votre horizon d\'investissement</label>';
@@ -1127,6 +1130,58 @@ function bindEvents(){
         return;
       }
     });
+  });
+
+  app.querySelectorAll(".rankhandle").forEach(setupDragHandle);
+}
+
+function setupDragHandle(handle){
+  handle.addEventListener("pointerdown", function(e){
+    e.preventDefault();
+    var item = handle.closest(".rankitem");
+    var list = item.parentElement;
+    var items = Array.from(list.children);
+    var orderKey = handle.getAttribute("data-orderkey");
+    var startIdx = parseInt(handle.getAttribute("data-idx"),10);
+    var startY = e.clientY;
+    var rowH = item.getBoundingClientRect().height + 8;
+    var currentIdx = startIdx;
+
+    item.classList.add("dragging");
+    items.forEach(function(other){ if(other!==item) other.classList.add("rank-shifting"); });
+    try{ handle.setPointerCapture(e.pointerId); }catch(err){}
+
+    function onMove(e){
+      var deltaY = e.clientY - startY;
+      item.style.transform = "translateY("+deltaY+"px)";
+      var shift = Math.round(deltaY / rowH);
+      var newIdx = Math.max(0, Math.min(items.length-1, startIdx+shift));
+      if(newIdx !== currentIdx){
+        items.forEach(function(other, i){
+          if(other===item) return;
+          if(i>startIdx && i<=newIdx) other.style.transform = "translateY(-"+rowH+"px)";
+          else if(i<startIdx && i>=newIdx) other.style.transform = "translateY("+rowH+"px)";
+          else other.style.transform = "";
+        });
+        currentIdx = newIdx;
+      }
+    }
+    function onUp(e){
+      try{ handle.releasePointerCapture(e.pointerId); }catch(err){}
+      handle.removeEventListener("pointermove", onMove);
+      handle.removeEventListener("pointerup", onUp);
+      handle.removeEventListener("pointercancel", onUp);
+      if(currentIdx !== startIdx){
+        var arr = state[orderKey];
+        var moved = arr.splice(startIdx,1)[0];
+        arr.splice(currentIdx,0,moved);
+        save();
+      }
+      render(false);
+    }
+    handle.addEventListener("pointermove", onMove);
+    handle.addEventListener("pointerup", onUp);
+    handle.addEventListener("pointercancel", onUp);
   });
 }
 
