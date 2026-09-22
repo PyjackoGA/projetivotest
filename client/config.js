@@ -9,7 +9,7 @@ window.IVO_CONFIG = {
   SUPABASE_ANON_KEY: "sb_publishable_A8BM0ShMoy4meT1OgHqhWg_l0ULTuk7",
 
   ADVISORS: [
-    { name: "Tristan Dantin", email: "tristan.dantin@ivocapital.com" },
+    { name: "Tristan d'Antin", email: "tristan.dantin@ivocapital.com" },
     { name: "Gabriel Atimi", email: "gabriel.atimi@ivocapital.com" },
   ],
 };
