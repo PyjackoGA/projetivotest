@@ -437,7 +437,7 @@ function stepVigilance(){
     '<p class="step-intro">Cette étape est imposée par la réglementation française de lutte contre le blanchiment (LCB-FT). Elle est identique pour l\'ensemble de nos clients — ce n\'est en rien une suspicion à votre égard.</p>';
 
   html += yesNoField("ppe.vous","Exercez-vous, ou avez-vous exercé depuis moins d'un an, une fonction politique, juridictionnelle ou administrative importante ?",
-    "On parle ici de \"Personne Politiquement Exposée\" (ministre, élu, magistrat, haut fonctionnaire...).);
+    "On parle ici de \"Personne Politiquement Exposée\" (ministre, élu, magistrat, haut fonctionnaire...).");
   if(state.ppe.vous===true){
     html += fieldRow([textField("ppe.vousFonction","Quelle fonction ?"), textField("ppe.vousPays","Dans quel pays ?")]);
   }
