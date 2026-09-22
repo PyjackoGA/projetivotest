@@ -189,7 +189,12 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--focus);outline-o
 
 /* ranking */
 .ranklist{display:flex;flex-direction:column;gap:8px;}
-.rankitem{display:flex;align-items:center;gap:12px;background:var(--blue-soft);border:1px solid var(--blue-soft-border);border-radius:5px;padding:10px 12px;}
+.rankitem{display:flex;align-items:center;gap:12px;background:var(--blue-soft);border:1px solid var(--blue-soft-border);border-radius:5px;padding:10px 12px;position:relative;}
+.rankitem.dragging{z-index:20;box-shadow:0 8px 20px -6px rgba(16,24,38,.35);cursor:grabbing;}
+.rankitem.rank-shifting{transition:transform .15s ease;}
+.rankhandle{cursor:grab;touch-action:none;color:var(--text-muted);font-size:16px;line-height:1;flex-shrink:0;padding:4px 2px;user-select:none;}
+.rankhandle:hover{color:var(--heading);}
+.rankhandle-inline{font-size:13px;}
 .ranknum{width:24px;height:24px;border-radius:50%;background:var(--navy);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
 .ranktext{flex:1;font-size:13.5px;font-weight:600;}
 .rankbtns{display:flex;gap:4px;}
