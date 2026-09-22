@@ -60,7 +60,68 @@ var INSTRUMENTS = [
   {k:"nonCotees", n:"Sociétés non cotées", d:"Participations directes dans des entreprises non cotées (private equity)."},
   {k:"contratsFinanciers", n:"Contrats financiers (futures, options)", d:"Produits dérivés complexes utilisés pour se couvrir ou spéculer."}
 ];
+var QUIZ_BANK = {
+  actions: [
+    {q:"Une action représente :", opts:["Une part de propriété dans une entreprise","Une créance sur l'État","Un contrat d'assurance","Un dépôt bancaire garanti"], correct:0},
+    {q:"Le principal risque d'un investissement en actions est :", opts:["La perte totale ou partielle du capital investi","Un rendement fixe garanti","L'absence de risque de change","Une garantie de l'État"], correct:0},
+    {q:"La valeur d'une action cotée peut :", opts:["Fluctuer à la hausse comme à la baisse, sans plancher garanti","Ne jamais baisser","Être garantie par la banque","Rester toujours fixe"], correct:0},
+  ],
+  obligations: [
+    {q:"Une obligation est :", opts:["Un titre de créance représentant un prêt à un émetteur","Une part du capital d'une entreprise","Un produit d'épargne réglementée","Un contrat d'assurance-vie"], correct:0},
+    {q:"Le principal risque d'une obligation est :", opts:["Le risque de défaut de l'émetteur (ne pas être remboursé)","L'absence totale de risque","Un risque de change uniquement","Une garantie de capital à tout moment"], correct:0},
+    {q:"Si les taux d'intérêt montent, le prix d'une obligation existante à taux fixe :", opts:["A tendance à baisser","Monte automatiquement","Reste toujours identique","Double instantanément"], correct:0},
+  ],
+  monetaire: [
+    {q:"Les instruments du marché monétaire sont principalement utilisés pour :", opts:["Un placement à court terme et une gestion de trésorerie","Un investissement sur 20 ans","Spéculer avec un fort effet de levier","Garantir une rente à vie"], correct:0},
+    {q:"Comparés aux actions, ils présentent généralement :", opts:["Un risque et un rendement plus faibles","Un risque et un rendement plus élevés","Aucun rendement possible","Un risque de perte illimité"], correct:0},
+    {q:"Un instrument du marché monétaire a une échéance typiquement :", opts:["Inférieure à un an","Supérieure à 30 ans","Il n'y a jamais d'échéance","Toujours exactement 10 ans"], correct:0},
+  ],
+  opcvm: [
+    {q:"Un FCP ou une SICAV permet :", opts:["De mutualiser l'épargne de plusieurs investisseurs dans un portefeuille géré collectivement","De prêter directement à une seule entreprise","De garantir un capital fixe à l'échéance","D'éviter tout risque de perte"], correct:0},
+    {q:"La performance d'un fonds dépend :", opts:["De l'évolution des actifs qui le composent","Uniquement du taux du Livret A","D'un taux fixé à l'avance par contrat","De rien de mesurable"], correct:0},
+    {q:"Les frais de gestion d'un fonds :", opts:["Réduisent la performance nette pour l'investisseur","Sont toujours remboursés en cas de perte","N'existent que pour les FCP, jamais les SICAV","Garantissent un rendement minimum"], correct:0},
+  ],
+  etf: [
+    {q:"Un tracker (ETF) a pour objectif de :", opts:["Répliquer la performance d'un indice boursier","Garantir un capital sans risque","Verser un revenu fixe trimestriel garanti","Éliminer tout risque de marché"], correct:0},
+    {q:"Un ETF sur un indice actions comporte :", opts:["Un risque de perte en capital lié aux marchés actions","Aucun risque, car il est diversifié","Une garantie de l'État","Un rendement garanti à l'avance"], correct:0},
+    {q:"Par rapport à un fonds géré activement, un ETF est en général :", opts:["Géré de façon passive, avec des frais plus faibles","Toujours plus cher","Jamais coté en bourse","Garanti sans risque de marché"], correct:0},
+  ],
+  warrants: [
+    {q:"Les warrants sont des produits :", opts:["Dérivés, à effet de levier, plus complexes et risqués","Sans aucun risque de perte","Réservés à l'épargne retraite","Garantis par l'État"], correct:0},
+    {q:"L'effet de levier d'un warrant signifie que :", opts:["Les gains et les pertes potentiels sont amplifiés","Le capital est garanti","Il n'y a aucun risque de perte totale","Le rendement est fixe et connu à l'avance"], correct:0},
+    {q:"Un warrant peut :", opts:["Perdre toute sa valeur avant son échéance","Ne jamais perdre de valeur","Se transformer automatiquement en action","Être assimilé à un livret d'épargne"], correct:0},
+  ],
+  defiscalisation: [
+    {q:"Les FCPI/FIP investissent principalement dans :", opts:["Des entreprises non cotées, souvent innovantes ou régionales","Des obligations d'État uniquement","De l'immobilier locatif","Des livrets réglementés"], correct:0},
+    {q:"En contrepartie de l'avantage fiscal, ces produits impliquent généralement :", opts:["Une durée de blocage des fonds et un risque de perte en capital","Une liquidité immédiate garantie","Aucun risque","Un capital garanti par la banque"], correct:0},
+    {q:"L'avantage fiscal d'un FCPI/FIP :", opts:["Ne compense pas nécessairement le risque de perte en capital","Garantit automatiquement un gain net","Supprime tout risque","N'existe que pour les FIP, jamais les FCPI"], correct:0},
+  ],
+  nonCotees: [
+    {q:"Investir dans une société non cotée signifie :", opts:["Détenir une participation dans une entreprise absente des marchés boursiers","Acheter une action cotée en Bourse de Paris","Souscrire un produit d'épargne garanti","Prêter à l'État"], correct:0},
+    {q:"La liquidité d'un investissement en non coté est généralement :", opts:["Faible : la revente peut être difficile et longue","Immédiate, comme une action cotée","Garantie sous 48h","Toujours instantanée"], correct:0},
+    {q:"Le risque de perte en capital sur une société non cotée est :", opts:["Potentiellement total, y compris en cas de faillite de l'entreprise","Nul, car non coté","Garanti par l'État","Couvert automatiquement par une assurance"], correct:0},
+  ],
+  contratsFinanciers: [
+    {q:"Les contrats financiers (futures, options) sont des produits :", opts:["Dérivés complexes, utilisés pour se couvrir ou spéculer","Sans effet de levier","Réservés à l'épargne salariale","Garantis sans risque"], correct:0},
+    {q:"Avec un effet de levier, une perte sur un contrat financier peut :", opts:["Dépasser la mise de départ, selon le produit","Toujours être plafonnée au montant investi","Ne jamais survenir","Être remboursée automatiquement"], correct:0},
+    {q:"Une option donne :", opts:["Le droit, mais pas l'obligation, d'acheter ou vendre un actif à des conditions définies","L'obligation ferme d'acheter un actif quoi qu'il arrive","Un dividende garanti","La propriété immédiate d'une entreprise"], correct:0},
+  ],
+};
 
+function shuffleArray(arr){
+  arr = arr.slice();
+  for(var i=arr.length-1;i>0;i--){
+    var j = Math.floor(Math.random()*(i+1));
+    var tmp=arr[i]; arr[i]=arr[j]; arr[j]=tmp;
+  }
+  return arr;
+}
+function rollQuiz(key){
+  var bank = QUIZ_BANK[key];
+  var idx = Math.floor(Math.random()*bank.length);
+  var order = shuffleArray(bank[idx].opts.map(function(_,i){return i;}));
+  return {quizIdx:idx, quizOrder:order};
+}
 function defaultState(){
   return {
     step:-1,
@@ -93,7 +154,7 @@ function defaultState(){
       chargesExploitation:"",chargesFinancieres:"",chargesExceptionnelles:"",
       impot:""},
 
-    instruments:(function(){var o={};INSTRUMENTS.forEach(function(i){o[i.k]={connait:null,ops:null};});return o;})(),
+    instruments:(function(){var o={};INSTRUMENTS.forEach(function(i){o[i.k]={connait:null,ops:null,declared:null,quizIdx:null,quizOrder:null,quizSelected:null};});return o;})(),
     gereSeul:null, gereSeulDepuis:"", mandatGestion:null, experiencePro:null, gains:null, pertes:null, conscienceRisque:null,
 
     objOrder: ["valoriser","completer","diversifier","securite","fiscalite","performance","succession"],
@@ -114,6 +175,14 @@ if(!state.advisorDraft){ state.advisorDraft = {email:"", name:""}; }
 if(typeof state.sentAt === "undefined"){ state.sentAt = null; }
 if(typeof state.pdfDownloaded === "undefined"){ state.pdfDownloaded = false; }
 if(typeof state.advisorEmail === "undefined"){ state.advisorEmail = ""; }
+INSTRUMENTS.forEach(function(ins){
+  var v = state.instruments[ins.k];
+  if(!v){ state.instruments[ins.k] = {connait:null,ops:null,declared:null,quizIdx:null,quizOrder:null,quizSelected:null}; return; }
+  if(typeof v.declared === "undefined") v.declared = v.connait===true ? "know" : v.connait===false ? "dontknow" : null;
+  if(typeof v.quizIdx === "undefined") v.quizIdx = null;
+  if(typeof v.quizOrder === "undefined") v.quizOrder = null;
+  if(typeof v.quizSelected === "undefined") v.quizSelected = null;
+});
 var visited = {}; // steps visited, for progress checkmarks
 if(state.step >= 0){ for(var i=0;i<=state.step;i++) visited[i]=true; }
 var advisorPanelOpen = false;
@@ -483,21 +552,23 @@ function stepConnaissance(){
     '<p class="step-intro">Pour chaque instrument, indiquez si vous en connaissez les risques et le nombre d\'opérations réalisées ces 12 derniers mois.</p>' +
     '<div class="instr">';
 
-  INSTRUMENTS.forEach(function(ins){
+    INSTRUMENTS.forEach(function(ins){
     var v = state.instruments[ins.k];
     html += '<div class="irow">' +
-      '<div class="iname">'+ins.n+'</div><div class="idesc">'+ins.d+'</div>' +
+      '<div class="iname">'+ins.n+'</div>' +
       '<div class="icontrols">' +
         '<div class="iyn">' +
-          ynBtn("instruments."+ins.k+".connait", true, v.connait, "Je connais") +
-          ynBtn("instruments."+ins.k+".connait", false, v.connait, "Je ne connais pas") +
+          '<button class="'+(v.declared==="know"?"on":"")+'" data-action="instrKnow" data-key="'+ins.k+'">Je connais</button>' +
+          '<button class="'+(v.declared==="dontknow"?"on":"")+'" data-action="instrDontKnow" data-key="'+ins.k+'">Je ne connais pas</button>' +
         '</div>' +
         '<div class="iops"><span class="iops-label">Opérations (12 mois) :</span>' +
           opsBtn("instruments."+ins.k+".ops","aucune",v.ops,"Aucune") +
           opsBtn("instruments."+ins.k+".ops","1",v.ops,"Au moins 1") +
           opsBtn("instruments."+ins.k+".ops","5",v.ops,"Au moins 5") +
         '</div>' +
-      '</div></div>';
+      '</div>' +
+      renderInstrumentFeedback(ins, v) +
+    '</div>';
   });
   html += '</div>';
 
@@ -511,6 +582,36 @@ function stepConnaissance(){
 
   html += navButtons();
   return html;
+}
+
+function renderInstrumentFeedback(ins, v){
+  if(v.declared==="dontknow"){
+    return '<div class="info"><span class="ic">ℹ️</span><div><b>'+ins.n+'</b> — '+ins.d+'</div></div>';
+  }
+  if(v.declared==="know"){
+    var entry = QUIZ_BANK[ins.k][v.quizIdx];
+    var html = '<div class="iquiz">' +
+      '<div class="iquiz-q">Pour confirmer : '+entry.q+'</div>' +
+      '<div class="iquiz-opts">';
+    v.quizOrder.forEach(function(optIdx){
+      var cls = "";
+      if(v.quizSelected!==null){
+        if(optIdx===v.quizSelected) cls = (optIdx===entry.correct) ? "picked-correct" : "picked-wrong";
+      }
+      html += '<button class="'+cls+'" data-action="quizAnswer" data-key="'+ins.k+'" data-value="'+optIdx+'"'+(v.quizSelected!==null?" disabled":"")+'>'+entry.opts[optIdx]+'</button>';
+    });
+    html += '</div>';
+    if(v.quizSelected!==null){
+      if(v.quizSelected===entry.correct){
+        html += '<div class="iquiz-feedback ok">✓ Connaissance confirmée pour cet instrument.</div>';
+      } else {
+        html += '<div class="iquiz-feedback ko">Cette réponse ne permet pas de confirmer la connaissance de cet instrument — il sera considéré comme non maîtrisé. Vous pouvez recliquer sur "Je connais" pour retenter.</div>';
+      }
+    }
+    html += '</div>';
+    return html;
+  }
+  return "";
 }
 
 /* ---------- STEP 5 : OBJECTIFS ---------- */
@@ -977,6 +1078,33 @@ function bindEvents(){
         var arr2 = state[ok];
         var j = action==="rankup" ? i0-1 : i0+1;
         if(j>=0 && j<arr2.length){ var tmp=arr2[i0]; arr2[i0]=arr2[j]; arr2[j]=tmp; }
+        save(); render(false); return;
+      }
+            if(action==="instrKnow"){
+        var ik = el.getAttribute("data-key");
+        var rolled = rollQuiz(ik);
+        state.instruments[ik].declared = "know";
+        state.instruments[ik].quizIdx = rolled.quizIdx;
+        state.instruments[ik].quizOrder = rolled.quizOrder;
+        state.instruments[ik].quizSelected = null;
+        state.instruments[ik].connait = null;
+        save(); render(false); return;
+      }
+      if(action==="instrDontKnow"){
+        var idk = el.getAttribute("data-key");
+        state.instruments[idk].declared = "dontknow";
+        state.instruments[idk].connait = false;
+        state.instruments[idk].quizSelected = null;
+        save(); render(false); return;
+      }
+      if(action==="quizAnswer"){
+        var qk = el.getAttribute("data-key");
+        var picked = parseInt(el.getAttribute("data-value"),10);
+        var inst = state.instruments[qk];
+        if(inst.quizSelected!==null) return;
+        inst.quizSelected = picked;
+        var entry = QUIZ_BANK[qk][inst.quizIdx];
+        inst.connait = (picked === entry.correct);
         save(); render(false); return;
       }
       if(action==="copy"){
