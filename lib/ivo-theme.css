@@ -87,13 +87,12 @@ h1,h2,h3,.display{
 #topbar{background:var(--navy);position:sticky;top:env(safe-area-inset-top,0px);z-index:10;box-shadow:0 2px 10px rgba(0,0,0,.18);overflow:hidden;}
 #topbar::after{content:"";position:absolute;top:0;right:0;bottom:0;width:clamp(80px,15vw,240px);background:var(--accent);clip-path:polygon(100% 0, 100% 100%, 0 100%);}
 .topbar-inner{max-width:760px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:11px;position:relative;z-index:1;}
-.brand-badge{
-  width:36px;height:36px;border-radius:6px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.3);
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-}
+.brand-badge{height:42px;display:flex;align-items:center;flex-shrink:0;}
+.brand-badge img{height:100%;width:auto;display:block;}
 .brand-badge span{color:#fff;font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:13.5px;letter-spacing:.02em;}
+.brand-context{padding-left:14px;margin-left:14px;border-left:1px solid rgba(255,255,255,.25);}
 .brand-name{font-family:'Libre Franklin',sans-serif;font-weight:700;font-size:14.5px;color:#fff;line-height:1.2;}
-.brand-sub{font-size:10px;letter-spacing:.13em;color:rgba(255,255,255,.68);text-transform:uppercase;}
+.brand-sub{font-size:10.5px;letter-spacing:.13em;color:rgba(255,255,255,.75);text-transform:uppercase;font-weight:600;}
 
 /* progress */
 .progress{display:flex;gap:4px;margin-bottom:30px;overflow-x:auto;padding-bottom:4px;}
