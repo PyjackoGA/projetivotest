@@ -692,10 +692,10 @@ function stepProfil(){
     '<p class="step-intro">Ces trois questions nous aident à cerner votre tolérance au risque. Le profil obtenu est indicatif : votre conseiller le validera avec vous lors de votre échange.</p>';
 
   html += '<div class="field"><label class="flabel">Pour un investissement de 100 000 €, quelle baisse temporaire seriez-vous prêt(e) à accepter ?</label>' +
-    optCard("risque.perte","p1",state.risque.perte,"Jusqu'à 10 000 €","Profil prudent") +
-    optCard("risque.perte","p2",state.risque.perte,"Jusqu'à 20 000 €","Profil équilibré") +
-    optCard("risque.perte","p3",state.risque.perte,"Jusqu'à 30 000 €","Profil dynamique") +
-    optCard("risque.perte","p4",state.risque.perte,"Plus de 30 000 €","Profil offensif / discrétionnaire") +
+    optCard("risque.perte","p1",state.risque.perte,"Jusqu'à 10 000 €", "") +
+    optCard("risque.perte","p2",state.risque.perte,"Jusqu'à 20 000 €", "") +
+    optCard("risque.perte","p3",state.risque.perte,"Jusqu'à 30 000 €", "") +
+    optCard("risque.perte","p4",state.risque.perte,"Plus de 30 000 €", "") +
   '</div>';
 
   html += '<div class="field"><label class="flabel">Si la valeur de vos investissements chutait brusquement, quelle serait votre réaction ?</label>' +
