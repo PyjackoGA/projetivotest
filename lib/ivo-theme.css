@@ -86,7 +86,7 @@ h1,h2,h3,.display{
 /* topbar */
 #topbar{background:var(--navy);position:sticky;top:env(safe-area-inset-top,0px);z-index:10;box-shadow:0 2px 10px rgba(0,0,0,.18);overflow:hidden;}
 #topbar::after{content:"";position:absolute;top:0;right:0;bottom:0;width:clamp(80px,15vw,240px);background:var(--accent);clip-path:polygon(100% 0, 100% 100%, 0 100%);}
-.topbar-inner{max-width:760px;margin:0 auto;padding:12px 16px;display:flex;align-items:center;gap:11px;position:relative;z-index:1;}
+.topbar-inner{max-width:760px;margin:0 auto;padding:4px 16px;display:flex;align-items:center;gap:11px;position:relative;z-index:1;}
 .brand-badge{height:150px;display:flex;align-items:center;flex-shrink:0;}
 .brand-badge img{height:100%;width:auto;display:block;}
 .brand-badge span{color:#fff;font-family:'Libre Franklin',sans-serif;font-weight:800;font-size:13.5px;letter-spacing:.02em;}
